@@ -47,5 +47,5 @@
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by NoteQ Team</sub>
+  <sub>Built with ❤️ by OpenCore Lab.</sub>
 </div>
