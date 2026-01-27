@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  @apply bg-background text-slate-800 dark:bg-slate-900 dark:text-slate-100;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* React Calendar Overrides for Sidebar */
+.react-calendar {
+  background: white !important;
+  color: black !important;
+  border: none !important;
+  font-family: 'Inter', sans-serif !important;
+  width: 100% !important;
+  border-radius: 8px; /* Optional: adds rounded corners */
+}
+
+.react-calendar__navigation {
+  margin-bottom: 0.5rem !important;
+}
+
+.react-calendar__navigation button {
+  color: black !important;
+  min-width: 24px !important;
+  background: none !important;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  border-radius: 4px;
+}
+
+.react-calendar__month-view__weekdays {
+  text-transform: uppercase;
+  font-size: 0.6em;
+  font-weight: bold;
+  opacity: 0.6;
+  color: black !important;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+  padding: 4px !important;
+  text-align: center;
+}
+
+.react-calendar__tile {
+  padding: 6px !important;
+  font-size: 0.9em;
+  border-radius: 6px;
+  color: black !important;
+  background: none !important;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.react-calendar__tile--now {
+  background: rgba(0, 0, 0, 0.05) !important;
+  font-weight: bold;
+  color: black !important;
+}
+
+.react-calendar__tile--active {
+  background: #2563EB !important; /* Keep active blue */
+  color: white !important; /* Active text white */
+  font-weight: bold;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+}
+
+/* Animations */
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-in-from-bottom-2 {
+  animation: slide-in-from-bottom 0.3s ease-out forwards;
+}
+
+/* Daily Note Marker */
+.has-daily-note {
+  position: relative;
+}
+
+.has-daily-note::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: #4ade80; /* Green dot */
+  border-radius: 50%;
+}
