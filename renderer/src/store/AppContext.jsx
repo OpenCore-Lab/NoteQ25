@@ -257,6 +257,10 @@ export const AppProvider = ({ children }) => {
         // 2. Get Notes (recursively from folders)
         const loadedNotes = await window.electron.invoke('get-notes');
         
+        // Notes are already Markdown. We don't need to convert to HTML anymore.
+        // Tiptap with Markdown extension will handle it.
+        setNotes(loadedNotes);
+
         // 3. Extract Tags from notes
         const allTags = new Set();
         loadedNotes.forEach(n => {
@@ -273,33 +277,98 @@ export const AppProvider = ({ children }) => {
         // 4. Handle "Business Proposal" restoration (using save-note)
         const hasRestoredBusinessNote = localStorage.getItem('businessNoteRestored_v4'); // Bump version
         if (!hasRestoredBusinessNote) {
-             const businessNoteContent = `# Business Proposal\n\n## Company Overview\n**Company Name:** BrightPath Solutions...`; // Simplified for brevity or use full content
+             const businessNoteContent = `# Business Proposal\n\n## Company Overview\n**Company Name:** BrightPath Solutions...`; 
+             
              const businessNote = {
                 id: uuidv4(),
                 title: 'Business Proposal',
                 category: 'Business',
                 tags: ['proposal', 'business'],
                 color: '#E3F2FD',
-                content: businessNoteContent,
+                content: businessNoteContent, // Already Markdown
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 preview: 'Company Name: BrightPath Solutions...'
              };
              
-             // Check if already exists in loadedNotes?
              if (!loadedNotes.find(n => n.title === 'Business Proposal')) {
                  await window.electron.invoke('save-note', businessNote);
+                 // Push HTML version to state - No, just push note
                  loadedNotes.push(businessNote);
-                 // Ensure Business category exists
                  if (!loadedCategories.includes('Business')) {
                      await window.electron.invoke('create-category', 'Business');
                      setCategories(prev => [...prev, 'Business']);
                  }
              }
-             localStorage.setItem('businessNoteRestored_v4', 'true');
+
+             // 5. Create Sample Rich Text Note (New Request)
+             const sampleNoteContent = `# Rich Text Feature Showcase
+
+This is a **comprehensive guide** to the rich text capabilities of NoteQ.
+
+## Typography
+You can use **bold text**, *italic text*, and underlined text (via toolbar).
+
+### Headings
+We support multiple heading levels (H1-H3).
+
+## Lists
+### Bullet List
+*   Item 1
+*   Item 2
+    *   Nested Item
+*   Item 3
+
+### Ordered List
+1.  First Step
+2.  Second Step
+3.  Third Step
+
+### Task List
+- [ ] To Do Item
+- [x] Completed Item
+
+## Code and Quotes
+> This is a blockquote. It's great for emphasizing text.
+
+\`\`\`javascript
+// This is a code block
+function hello() {
+  console.log("Hello NoteQ!");
+}
+\`\`\`
+
+## Links
+[Visit Google](https://google.com)
+
+## Alignment
+The editor supports left, center, right, and justified alignment.
+`;
+             
+             const sampleNote = {
+                id: uuidv4(),
+                title: 'Rich Text Feature Showcase',
+                category: 'General',
+                tags: ['showcase', 'demo'],
+                color: '#F3E5F5',
+                content: sampleNoteContent,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                preview: 'This is a comprehensive guide to the rich text capabilities of NoteQ.'
+             };
+
+             if (!notesWithHtml.find(n => n.title === 'Rich Text Feature Showcase')) {
+                 await window.electron.invoke('save-note', sampleNote);
+                 notesWithHtml.push({
+                     ...sampleNote,
+                     content: marked.parse(sampleNoteContent)
+                 });
+             }
+
+             localStorage.setItem('businessNoteRestored_v5', 'true');
         }
 
-        setNotes(loadedNotes);
+        setNotes(notesWithHtml);
       }
     } catch (error) {
       console.error('Failed to load notes:', error);
@@ -336,7 +405,12 @@ export const AppProvider = ({ children }) => {
 
     try {
       if (window.electron) {
-        await window.electron.invoke('save-note', newNote);
+        // Convert content to Markdown if it's HTML (though new notes start as MD usually)
+        // But for consistency, if we ever init with HTML:
+        const isHtml = /<[a-z][\s\S]*>/i.test(newNote.content);
+        const contentToSave = isHtml ? turndownService.turndown(newNote.content) : newNote.content;
+        
+        await window.electron.invoke('save-note', { ...newNote, content: contentToSave });
       }
     } catch (error) {
       console.error('Failed to create note:', error);
@@ -348,6 +422,7 @@ export const AppProvider = ({ children }) => {
     
     if (saveToDisk) {
         try {
+          // Content is already Markdown
           if (window.electron) await window.electron.invoke('save-note', updatedNote);
         } catch (error) {
           console.error('Failed to update note:', error);

@@ -133,18 +133,24 @@ ipcMain.handle('save-note', async (event, note) => {
         await ensureCategoryStructure(projectPath, category);
         
         // Prepare Frontmatter data
+        // sanitize: remove undefined values to prevent YAMLException
         const data = {
-            id: note.id,
-            title: note.title,
-            tags: note.tags || [],
-            color: note.color,
-            created_at: note.created_at,
+            id: note.id || uuidv4(),
+            title: (note.title || 'Untitled').toString(),
+            tags: Array.isArray(note.tags) ? note.tags.filter(t => t !== undefined && t !== null).map(String) : [],
+            color: note.color || '#ffffff',
+            created_at: note.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            preview: note.preview
+            preview: (note.preview || '').toString()
         };
+
+        // Double check: explicitly delete undefined keys if any slipped through logic (though defaults above cover it)
+        Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
         
+        logDebug(`[save-note] Sanitized Data: ${JSON.stringify(data)}`);
+
         // Create Markdown content
-        const fileContent = matter.stringify(note.content || '', data);
+        const fileContent = matter.stringify((note.content || '').toString(), data);
         
         const fileName = `${note.id}.md`;
         const relativePath = path.join(category.trim(), 'notes', fileName);

@@ -4,9 +4,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Editor Lists Fix */
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Task List Fix */
+ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+li[data-type="taskItem"] label {
+  margin-top: 0.25rem;
+  user-select: none;
+}
+
+li[data-type="taskItem"] > div {
+  flex: 1;
+  margin: 0 !important;
+}
+
 html, body, #root {
   height: 100%;
   overflow: hidden;
+  /* zoom: 1.0; Explicitly reset just in case, though removing is better */
 }
 
 body {

@@ -20,15 +20,69 @@ import {
   FileX, ChevronRight, Calendar, User, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, Link as LinkIcon, MoreHorizontal,
   CheckSquare, Highlighter, Palette, Undo, Redo, Heading1, Heading2, Heading3,
-  Save
+  Save, Code, FileText
 } from 'lucide-react';
+import { Markdown } from 'tiptap-markdown';
 import { clsx } from 'clsx';
 import { format, isToday, isYesterday } from 'date-fns';
 import toast from 'react-hot-toast';
 import ConfirmModal from './ConfirmModal';
 
 import CharacterCount from '@tiptap/extension-character-count';
-import { Extension } from '@tiptap/core';
+import { Extension, wrappingInputRule } from '@tiptap/core';
+
+const AutoListExtension = Extension.create({
+  name: 'autoList',
+  addInputRules() {
+    return [
+      wrappingInputRule({
+        find: /^(\d+)\.\s$/,
+        type: this.editor.schema.nodes.orderedList,
+        getAttributes: match => ({ start: +match[1] }),
+      }),
+      wrappingInputRule({
+        find: /^([-+*])\s$/,
+        type: this.editor.schema.nodes.bulletList,
+      }),
+    ];
+  },
+});
+
+const SmartListKeyboardExtension = Extension.create({
+  name: 'smartListKeyboard',
+  addKeyboardShortcuts() {
+    return {
+      'Tab': () => {
+        if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
+          return this.editor.commands.sinkListItem(this.editor.isActive('taskItem') ? 'taskItem' : 'listItem');
+        }
+        return false;
+      },
+      'Shift-Tab': () => {
+        if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
+          return this.editor.commands.liftListItem(this.editor.isActive('taskItem') ? 'taskItem' : 'listItem');
+        }
+        return false;
+      },
+      'Enter': () => {
+        // Special behavior for empty task items: convert to paragraph (break out of list)
+        if (this.editor.isActive('taskItem')) {
+            const { empty } = this.editor.state.selection;
+            const { $from } = this.editor.state.selection;
+            const isAtEnd = $from.parentOffset === $from.parent.content.size;
+            const isEmpty = $from.parent.content.size === 0;
+            
+            // If empty task item, splitListItem usually creates another empty one.
+            // We want standard Tiptap behavior but ensure it breaks out if empty.
+            if (isEmpty) {
+                return this.editor.commands.liftListItem('taskItem');
+            }
+        }
+        return false; // Let default handlers work
+      }
+    };
+  },
+});
 
 const LineHeightExtension = Extension.create({
   name: 'lineHeight',
@@ -340,6 +394,8 @@ const ToolbarButton = ({ onClick, isActive, icon, disabled = false, title }) => 
 
 const Editor = () => {
   const { selectedNote, updateNote, deleteNote, focusMode, setFocusMode, addNotification, tags, setUnsavedChanges } = useApp();
+  const [viewMode, setViewMode] = useState('visualize'); // 'visualize' | 'raw'
+  const [rawContent, setRawContent] = useState('');
   const [isPreview, setIsPreview] = useState(false);
   const selectedNoteId = selectedNote?.id;
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -370,6 +426,9 @@ const Editor = () => {
   const [lastSaved, setLastSaved] = useState(null);
   const [syncInterval, setSyncInterval] = useState('2m'); // auto, 2m, 15m, 30m
   const [charCount, setCharCount] = useState(0);
+  
+  // Force update for toolbar state
+  const [, forceUpdate] = useState(0);
 
   const editor = useEditor({
     extensions: [
@@ -394,20 +453,31 @@ const Editor = () => {
       TaskItem.configure({ nested: true }),
       LineHeightExtension,
       CharacterCount,
+      AutoListExtension,
+      SmartListKeyboardExtension,
+      Markdown.configure({
+        html: false,
+        transformPastedText: true,
+        transformCopiedText: true
+      }),
     ],
     content: '',
+    onSelectionUpdate: () => {
+        // Force re-render to update toolbar state
+        forceUpdate(n => n + 1);
+    },
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
+      const md = editor.storage.markdown.getMarkdown();
       const text = editor.getText();
       setCharCount(editor.storage.characterCount.characters());
       
       // Only mark dirty if content ACTUALLY changed from what we loaded
-      if (selectedNote && html !== selectedNote.content) {
+      if (selectedNote && md !== selectedNote.content) {
           setUnsavedChanges(true); // Mark as dirty
           
           updateNote({
             ...selectedNote,
-            content: html,
+            content: md,
             preview: text.substring(0, 100),
             updated_at: new Date().toISOString()
           }, false);
@@ -455,14 +525,25 @@ const Editor = () => {
       if (!selectedNote) return;
       setIsSaving(true);
       try {
-          // Force save to disk
-          await updateNote({
+          // Determine content to save based on view mode
+          let noteUpdate = {
               ...selectedNote,
               title: title,
-              content: editor?.getHTML() || selectedNote.content,
-              preview: editor?.getText().substring(0, 100) || selectedNote.preview,
               updated_at: new Date().toISOString()
-          }, true); 
+          };
+
+          if (viewMode === 'raw') {
+              // In Raw mode, save the raw content directly
+              noteUpdate.content = rawContent; 
+              noteUpdate.preview = rawContent.substring(0, 100);
+          } else {
+              // In Visualize mode, use editor Markdown
+              noteUpdate.content = editor?.storage.markdown.getMarkdown() || selectedNote.content;
+              noteUpdate.preview = editor?.getText().substring(0, 100) || selectedNote.preview;
+          }
+
+          // Force save to disk
+          await updateNote(noteUpdate, true); 
           
           setLastSaved(new Date());
           setUnsavedChanges(false); // Mark as clean
@@ -476,7 +557,7 @@ const Editor = () => {
 
   const setLink = useCallback(() => {
     if (!editor) return;
-    const previousUrl = editor.getAttributes('link').href;
+    const previousUrl = editor.getAttributes('link').href || '';
     const url = window.prompt('URL', previousUrl);
 
     if (url === null) return;
@@ -485,6 +566,45 @@ const Editor = () => {
       return;
     }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  }, [editor]);
+
+  // Intelligent List Toggle (Prevents "Whole Page" bugs)
+  const toggleList = useCallback((listType, itemType = 'listItem') => {
+      if (!editor) return;
+      
+      let chain = editor.chain().focus();
+      const { selection } = editor.state;
+      
+      // 1. Normalize/Collapse empty selection to current block
+      // This prevents "wrapping the whole document" if the selection is ambiguous
+      if (selection.empty) {
+          chain = chain.selectParentNode();
+      } else {
+           // 2. Handle Range Selection (User marked text)
+           // "Enterprise Principle": Normalize to smallest logical block range
+           let startBlockPos = null;
+           let endBlockPos = null;
+           
+           editor.state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+               if (node.isBlock) {
+                   if (startBlockPos === null) startBlockPos = pos;
+                   endBlockPos = pos + node.nodeSize;
+               }
+           });
+           
+           if (startBlockPos !== null && endBlockPos !== null) {
+               chain = chain.setTextSelection({ from: startBlockPos, to: endBlockPos });
+           }
+      }
+      
+      // 3. Toggle logic
+      if (editor.isActive(listType)) {
+          chain = chain.liftListItem(itemType);
+      } else {
+          chain = chain.wrapInList(listType);
+      }
+      
+      chain.run();
   }, [editor]);
 
   const addImage = useCallback(async () => {
@@ -537,7 +657,11 @@ const Editor = () => {
         setTitle(selectedNote.title);
       }
       // Only set content if different (e.g. switching notes)
-      if (editor.getHTML() !== selectedNote.content) {
+      // selectedNote.content is now Markdown string
+      // We check against current editor markdown
+      const currentMd = editor.storage.markdown.getMarkdown();
+      
+      if (currentMd !== selectedNote.content) {
         editor.commands.setContent(selectedNote.content || '');
         // Reset dirty state only when content is programmatically loaded/replaced
         setTimeout(() => setUnsavedChanges(false), 0);
@@ -615,6 +739,49 @@ const Editor = () => {
     );
   };
 
+  // Handle View Mode Toggle
+  const toggleViewMode = () => {
+    if (viewMode === 'visualize') {
+        // Switch to Raw: Get Markdown from storage
+        const md = editor?.storage.markdown.getMarkdown() || '';
+        setRawContent(md);
+        setViewMode('raw');
+    } else {
+        // Switch to Visualize: Set Markdown content
+        // Tiptap with Markdown extension can accept markdown string if configured or if we use setContent properly
+        // Actually, with the extension, setContent might still expect JSON/HTML unless we use a specific command.
+        // But usually standard setContent parses correctly if it looks like MD? No.
+        // We should use: editor.commands.setContent(rawContent) and rely on extension?
+        // Let's verify. The extension intercepts setContent?
+        // Documentation says: editor.commands.setContent(markdown) works.
+        editor?.commands.setContent(rawContent, { contentType: 'markdown' });
+        setViewMode('visualize');
+        
+        // Sync back to store
+        if (selectedNote) {
+             updateNote({
+                ...selectedNote,
+                content: rawContent,
+                updated_at: new Date().toISOString()
+             }, false);
+        }
+    }
+  };
+
+  // Handle Raw Content Change
+  const handleRawChange = (e) => {
+      const newMd = e.target.value;
+      setRawContent(newMd);
+      setUnsavedChanges(true);
+      
+      updateNote({
+        ...selectedNote,
+        content: newMd,
+        preview: newMd.substring(0, 100),
+        updated_at: new Date().toISOString()
+      }, false);
+  };
+
   if (!selectedNote) {
     return (
       <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-900 font-sans transition-colors duration-200">
@@ -633,7 +800,7 @@ const Editor = () => {
 
   return (
     <>
-    <div className="flex-1 bg-white dark:bg-slate-900 h-full flex flex-col font-sans transition-colors duration-200">
+    <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 h-full flex flex-col font-sans transition-colors duration-200">
       {/* Top Bar: Breadcrumbs & Window Controls */}
       <div className="px-6 py-2 flex items-center justify-between border-b border-transparent" style={{ WebkitAppRegion: 'drag' }}>
          {/* Breadcrumbs */}
@@ -774,78 +941,89 @@ const Editor = () => {
                 </div>
             </div>
 
-            {/* Rich Text Toolbar - Modern & Floating-ish */}
-            <div className="sticky top-0 z-30 mb-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-xl px-2 py-1.5 flex items-center gap-1 shadow-sm flex-wrap w-fit">
-                 {/* Font Formatting */}
-                 <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-2 mr-2">
-                    <ToolbarButton onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()} icon={<Undo size={16} />} title="Undo" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()} icon={<Redo size={16} />} title="Redo" />
-                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} isActive={editor?.isActive('bold')} icon={<Bold size={16} />} title="Bold" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} isActive={editor?.isActive('italic')} icon={<Italic size={16} />} title="Italic" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} isActive={editor?.isActive('underline')} icon={<Underline size={16} />} title="Underline" />
-                    <ToolbarButton onClick={setLink} isActive={editor?.isActive('link')} icon={<LinkIcon size={16} />} title="Link" />
-                    <ToolbarButton onClick={toggleHighlight} isActive={editor?.isActive('highlight')} icon={<Highlighter size={16} />} title="Highlight" />
-                    <div className="relative flex items-center">
-                        <Palette size={16} className="text-slate-500 ml-1.5" />
-                        <input 
-                            type="color" 
-                            onInput={setColor} 
-                            className="w-6 h-6 p-0 border-0 bg-transparent cursor-pointer ml-1" 
-                            title="Text Color"
-                            value={editor?.getAttributes('textStyle').color || '#000000'}
-                        />
-                    </div>
-                 </div>
-
-                 {/* Lists */}
-                 <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-2 mr-2">
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleBulletList().run()} isActive={editor?.isActive('bulletList')} icon={<List size={16} />} title="Bullet List" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleOrderedList().run()} isActive={editor?.isActive('orderedList')} icon={<ListOrdered size={16} />} title="Ordered List" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().toggleTaskList().run()} isActive={editor?.isActive('taskList')} icon={<CheckSquare size={16} />} title="Checklist" />
-                 </div>
-
-                 {/* Alignment */}
-                 <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-2 mr-2">
-                    <ToolbarButton onClick={() => editor?.chain().focus().setTextAlign('left').run()} isActive={editor?.isActive({ textAlign: 'left' })} icon={<AlignLeft size={16} />} title="Align Left" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().setTextAlign('center').run()} isActive={editor?.isActive({ textAlign: 'center' })} icon={<AlignCenter size={16} />} title="Align Center" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().setTextAlign('right').run()} isActive={editor?.isActive({ textAlign: 'right' })} icon={<AlignRight size={16} />} title="Align Right" />
-                    <ToolbarButton onClick={() => editor?.chain().focus().setTextAlign('justify').run()} isActive={editor?.isActive({ textAlign: 'justify' })} icon={<AlignJustify size={16} />} title="Justify" />
-                    
-                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
-                    
-                    {/* Line Height Dropdown (Simplified) */}
-                    <div className="relative group">
-                        <button className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" title="Line Height">
-                            <MoreHorizontal size={16} />
-                        </button>
-                        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-1 hidden group-hover:block z-50 min-w-[100px]">
-                            {['1.0', '1.15', '1.5', '2.0', '2.5'].map(height => (
-                                <button
-                                    key={height}
-                                    onClick={() => setLineHeight(height)}
-                                    className={clsx(
-                                        "w-full text-left px-2 py-1 text-xs rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300",
-                                        editor?.isActive({ lineHeight: height }) && "bg-primary/10 text-primary"
-                                    )}
-                                >
-                                    {height}
-                                </button>
-                            ))}
+            {/* Rich Text Toolbar - Compact & Adaptive */}
+            <div className="sticky top-0 z-30 mb-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-lg px-1.5 py-1 flex items-center justify-between shadow-sm w-full transition-all">
+                 {/* Left: Formatting Tools (Only in Visualize) */}
+                 <div className="flex items-center gap-1 flex-wrap">
+                     {viewMode === 'visualize' ? (
+                        <>
+                        {/* History */}
+                        <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-1 mr-1">
+                            <ToolbarButton onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()} icon={<Undo size={14} />} title="Undo" />
+                            <ToolbarButton onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()} icon={<Redo size={14} />} title="Redo" />
                         </div>
-                    </div>
+
+                        {/* Font Formatting */}
+                        <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-1 mr-1">
+                            <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} isActive={editor?.isActive('bold')} icon={<Bold size={14} />} title="Bold" />
+                            <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} isActive={editor?.isActive('italic')} icon={<Italic size={14} />} title="Italic" />
+                            <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} isActive={editor?.isActive('underline')} icon={<Underline size={14} />} title="Underline" />
+                            <ToolbarButton onClick={setLink} isActive={editor?.isActive('link')} icon={<LinkIcon size={14} />} title="Link" />
+                            <ToolbarButton onClick={toggleHighlight} isActive={editor?.isActive('highlight')} icon={<Highlighter size={14} />} title="Highlight" />
+                        </div>
+
+                        {/* Lists & Align */}
+                        <div className="flex items-center gap-0.5 border-r border-slate-200 dark:border-slate-700 pr-1 mr-1">
+                            <ToolbarButton onClick={() => toggleList('bulletList')} isActive={editor?.isActive('bulletList')} icon={<List size={14} />} title="Bullet List" />
+                            <ToolbarButton onClick={() => toggleList('orderedList')} isActive={editor?.isActive('orderedList')} icon={<ListOrdered size={14} />} title="Ordered List" />
+                            <ToolbarButton onClick={() => toggleList('taskList', 'taskItem')} isActive={editor?.isActive('taskList')} icon={<CheckSquare size={14} />} title="Checklist" />
+                        </div>
+                        
+                        {/* Media */}
+                        <div className="flex items-center gap-0.5">
+                            <ToolbarButton onClick={addImage} icon={<ImageIcon size={14} />} title="Insert Image" />
+                        </div>
+                        </>
+                     ) : (
+                        <div className="flex items-center gap-2 px-2 py-1">
+                            <Code size={16} className="text-slate-400" />
+                            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">Raw Markdown Mode</span>
+                        </div>
+                     )}
                  </div>
-                 
-                 {/* Media & Actions */}
-                 <div className="flex items-center gap-0.5">
-                     <ToolbarButton onClick={addImage} icon={<ImageIcon size={16} />} title="Insert Image" />
-                     <ToolbarButton icon={<Paperclip size={16} />} disabled title="Attach File" />
-                     <ToolbarButton onClick={handlePrint} icon={<Printer size={16} />} title="Print" />
+
+                 {/* Right: View Mode Toggle */}
+                 <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700 ml-2 shrink-0">
+                    <button 
+                        onClick={() => viewMode === 'raw' && toggleViewMode()}
+                        className={clsx(
+                            "px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all",
+                            viewMode === 'visualize' 
+                                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        )}
+                        title="Visualize Mode (Rich Text)"
+                    >
+                        <Eye size={14} />
+                        <span className="hidden sm:inline">Visualize</span>
+                    </button>
+                    <button 
+                        onClick={() => viewMode === 'visualize' && toggleViewMode()}
+                        className={clsx(
+                            "px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all",
+                            viewMode === 'raw' 
+                                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        )}
+                        title="Raw Mode (Markdown Source)"
+                    >
+                        <Code size={14} />
+                        <span className="hidden sm:inline">Raw</span>
+                    </button>
                  </div>
             </div>
 
-            {/* Editor Content */}
-            <EditorContent editor={editor} className="min-h-[400px] text-base leading-relaxed text-slate-700 dark:text-slate-300" />
+            {/* Editor Content or Raw Textarea */}
+            {viewMode === 'visualize' ? (
+                <EditorContent editor={editor} className="min-h-[400px] text-base leading-relaxed text-slate-700 dark:text-slate-300" />
+            ) : (
+                <textarea
+                    value={rawContent}
+                    onChange={handleRawChange}
+                    className="w-full min-h-[500px] p-4 font-mono text-sm bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-200 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y leading-relaxed"
+                    placeholder="# Start writing markdown..."
+                />
+            )}
         </div>
       </div>
 
