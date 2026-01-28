@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
-import { Folder, Lock, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Folder, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ShootingStarsDOM } from './ui/shooting-stars';
 import logo from '../../assets/logo.png';
 
-const LandingPage = ({ onOpenProject, onCreateNew }) => {
-    const [projectPath, setProjectPath] = useState('');
+const LandingPage = ({ onOpenProject, onCreateNew, initialPath }) => {
+    const [projectPath, setProjectPath] = useState(initialPath || '');
     const [pin, setPin] = useState('');
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [recoveryKeyName, setRecoveryKeyName] = useState('');
     const [recoveryKeyContent, setRecoveryKeyContent] = useState(null);
+
+    useEffect(() => {
+        if (initialPath) {
+            setProjectPath(initialPath);
+        }
+    }, [initialPath]);
 
     const handleSelectFolder = async () => {
         try {
@@ -89,6 +95,15 @@ const LandingPage = ({ onOpenProject, onCreateNew }) => {
             `}</style>
 
             <div className="relative z-10 w-full max-w-md p-8 bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
+                {onCreateNew && (
+                    <button 
+                        onClick={onCreateNew}
+                        className="absolute top-6 left-6 text-white/40 hover:text-white transition-colors"
+                        title="Back"
+                    >
+                        <ArrowLeft size={24} />
+                    </button>
+                )}
                 <div className="flex flex-col items-center mb-8">
                     <img src={logo} alt="NoteQ" className="h-16 w-auto mb-4 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
                     <h1 className="text-2xl font-bold text-white tracking-wide">Welcome Back</h1>

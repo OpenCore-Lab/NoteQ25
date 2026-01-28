@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
+import ConfirmModal from '../components/ConfirmModal';
+
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
@@ -30,6 +32,44 @@ export const AppProvider = ({ children }) => {
 
   // Notification History State
   const [notifications, setNotifications] = useState([]);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  
+  // Confirm Modal State for Navigation
+  const [navConfirm, setNavConfirm] = useState({
+    isOpen: false,
+    onConfirm: () => {},
+    onCancel: () => {}
+  });
+
+  // New wrapper for navigation protection
+  const checkUnsavedChanges = (action) => {
+    if (unsavedChanges) {
+        setNavConfirm({
+            isOpen: true,
+            onConfirm: () => {
+                setUnsavedChanges(false);
+                setNavConfirm(prev => ({ ...prev, isOpen: false }));
+                action();
+            },
+            onCancel: () => {
+                setNavConfirm(prev => ({ ...prev, isOpen: false }));
+            }
+        });
+    } else {
+      action();
+    }
+  };
+  
+  // Wrapped Setters
+  const handleSetSelectedNoteId = (id) => {
+      checkUnsavedChanges(() => setSelectedNoteId(id));
+  };
+  
+  const handleSetSelectedCategory = (cat) => {
+      checkUnsavedChanges(() => setSelectedCategory(cat));
+  };
+
+  // ... existing code ...
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -109,6 +149,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const addCategory = async (categoryName) => {
+    if (categoryName.startsWith('.')) return; // Prevent hidden categories
     if (!categories.includes(categoryName)) {
       setCategories(prev => [...prev, categoryName]);
       try {
@@ -206,9 +247,12 @@ export const AppProvider = ({ children }) => {
       if (window.electron) {
         // 1. Get Categories from folders
         const loadedCategories = await window.electron.invoke('get-categories');
-        if (loadedCategories && loadedCategories.length > 0) {
-            setCategories(['All', ...loadedCategories]);
-        }
+        
+        // Ensure "Daily Note" exists in the list even if folder is missing (it will be created on note save)
+        // STRICTLY filter out any hidden folders starting with dot
+        const filteredCategories = (loadedCategories || []).filter(c => !c.startsWith('.'));
+        const uniqueCategories = new Set(['All', 'Daily Note', ...filteredCategories]);
+        setCategories(Array.from(uniqueCategories));
 
         // 2. Get Notes (recursively from folders)
         const loadedNotes = await window.electron.invoke('get-notes');
@@ -265,6 +309,9 @@ export const AppProvider = ({ children }) => {
   };
 
   const addNote = async (overrides = {}) => {
+    // Safety check: if overrides is an Event object (from onClick), ignore it
+    const safeOverrides = (overrides && overrides.preventDefault) ? {} : overrides;
+
     const categoryToUse = selectedCategory === 'All' ? 'General' : selectedCategory;
 
     const colors = [
@@ -281,7 +328,7 @@ export const AppProvider = ({ children }) => {
       content: '# Untitled Note\n\nStart writing...',
       created_at: new Date().toISOString(),
       preview: 'Start writing...',
-      ...overrides
+      ...safeOverrides
     };
     
     setNotes(prev => [newNote, ...prev]);
@@ -296,12 +343,15 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const updateNote = async (updatedNote) => {
+  const updateNote = async (updatedNote, saveToDisk = true) => {
     setNotes(prev => prev.map(n => n.id === updatedNote.id ? { ...n, ...updatedNote } : n));
-    try {
-      if (window.electron) await window.electron.invoke('save-note', updatedNote);
-    } catch (error) {
-      console.error('Failed to update note:', error);
+    
+    if (saveToDisk) {
+        try {
+          if (window.electron) await window.electron.invoke('save-note', updatedNote);
+        } catch (error) {
+          console.error('Failed to update note:', error);
+        }
     }
   };
 
@@ -365,8 +415,10 @@ export const AppProvider = ({ children }) => {
   const filteredNotes = notes.filter(note => {
     if (note.trashed) return false; 
     const matchesCategory = selectedCategory === 'All' || note.category === selectedCategory;
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (note.preview && note.preview.toLowerCase().includes(searchQuery.toLowerCase()));
+    const safeTitle = note.title || '';
+    const safeQuery = searchQuery || '';
+    const matchesSearch = safeTitle.toLowerCase().includes(safeQuery.toLowerCase()) || 
+                          (note.preview && note.preview.toLowerCase().includes(safeQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
   }).sort((a, b) => {
     if (sortOption === 'date-desc') return new Date(b.created_at) - new Date(a.created_at);
@@ -391,9 +443,11 @@ export const AppProvider = ({ children }) => {
       trashedNotes,
       selectedNote,
       selectedNoteId,
-      setSelectedNoteId,
+      setSelectedNoteId: handleSetSelectedNoteId,
       selectedCategory,
-      setSelectedCategory,
+      setSelectedCategory: handleSetSelectedCategory,
+      unsavedChanges,
+      setUnsavedChanges,
       searchQuery,
       setSearchQuery,
       addNote,
@@ -420,6 +474,14 @@ export const AppProvider = ({ children }) => {
       clearNotifications
     }}>
       {children}
+      <ConfirmModal 
+        isOpen={navConfirm.isOpen}
+        onClose={navConfirm.onCancel}
+        onConfirm={navConfirm.onConfirm}
+        title="Unsaved Changes"
+        message="You have unsaved changes. Are you sure you want to discard them and switch?"
+        type="warning"
+      />
     </AppContext.Provider>
   );
 };

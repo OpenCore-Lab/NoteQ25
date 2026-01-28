@@ -1,5 +1,6 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
 const Store = require('electron-store');
@@ -7,16 +8,54 @@ const { v4: uuidv4 } = require('uuid');
 
 const store = new Store();
 
+// DEBUG LOGGING
+const DEBUG_LOG_PATH = path.join(process.env.USERPROFILE || process.env.HOME, 'Desktop', 'noteq_debug.log');
+function logDebug(message) {
+    const timestamp = new Date().toISOString();
+    const logLine = `[${timestamp}] ${message}\n`;
+    try {
+        fsSync.appendFileSync(DEBUG_LOG_PATH, logLine);
+    } catch (e) {
+        // Ignore logging errors
+    }
+}
+
 function getProjectPath() {
-    return store.get('project.path');
+    const p = store.get('project.path');
+    logDebug(`getProjectPath returned: ${p}`);
+    return p;
 }
 
 // Helper to ensure category structure
 async function ensureCategoryStructure(projectPath, category) {
-    const catPath = path.join(projectPath, category);
-    await fs.mkdir(path.join(catPath, 'notes'), { recursive: true });
-    await fs.mkdir(path.join(catPath, 'images'), { recursive: true });
-    await fs.mkdir(path.join(catPath, 'files'), { recursive: true });
+    const safeCategory = category.trim(); 
+    const catPath = path.join(projectPath, safeCategory);
+    
+    logDebug(`ensureCategoryStructure: ensuring ${catPath}`);
+
+    // Ensure parent folder exists (project path)
+    try {
+        await fs.access(projectPath);
+    } catch {
+        logDebug(`ensureCategoryStructure: Project path missing, creating ${projectPath}`);
+        await fs.mkdir(projectPath, { recursive: true });
+    }
+
+    // Create subfolders
+    const notesPath = path.join(catPath, 'notes');
+    const imagesPath = path.join(catPath, 'images');
+    const filesPath = path.join(catPath, 'files');
+
+    try {
+        await fs.mkdir(notesPath, { recursive: true });
+        logDebug(`ensureCategoryStructure: Created/Verified ${notesPath}`);
+        await fs.mkdir(imagesPath, { recursive: true });
+        await fs.mkdir(filesPath, { recursive: true });
+    } catch (e) {
+        logDebug(`ensureCategoryStructure: Error creating folders: ${e.message}`);
+        throw e;
+    }
+    
     return catPath;
 }
 
@@ -41,7 +80,7 @@ ipcMain.handle('get-notes', async () => {
         let allNotes = [];
         
         for (const cat of categories) {
-            if (cat.isDirectory()) {
+            if (cat.isDirectory() && !cat.name.startsWith('.')) {
                 const categoryName = cat.name;
                 const notesPath = path.join(projectPath, categoryName, 'notes');
                 
@@ -76,12 +115,21 @@ ipcMain.handle('get-notes', async () => {
     }
 });
 
+// ... (keep ipcMain handlers) ...
+
 ipcMain.handle('save-note', async (event, note) => {
+    logDebug(`[save-note] START: Saving note "${note.title}" (${note.id})`);
+    
     const projectPath = getProjectPath();
-    if (!projectPath) return { success: false, error: 'No project path set' };
+    if (!projectPath) {
+        logDebug(`[save-note] ERROR: No project path set`);
+        return { success: false, error: 'No project path set' };
+    }
     
     try {
         const category = note.category || 'General';
+        logDebug(`[save-note] Category: "${category}"`);
+        
         await ensureCategoryStructure(projectPath, category);
         
         // Prepare Frontmatter data
@@ -99,17 +147,25 @@ ipcMain.handle('save-note', async (event, note) => {
         const fileContent = matter.stringify(note.content || '', data);
         
         const fileName = `${note.id}.md`;
-        const relativePath = path.join(category, 'notes', fileName);
+        const relativePath = path.join(category.trim(), 'notes', fileName);
         const fullPath = path.join(projectPath, relativePath);
         
+        logDebug(`[save-note] Writing to: ${fullPath}`);
         await fs.writeFile(fullPath, fileContent, 'utf-8');
         
-        // If category changed, delete old file? 
-        // Logic handled by frontend usually, but for now we just write.
+        // Verify file was written
+        try {
+            await fs.access(fullPath);
+            logDebug(`[save-note] SUCCESS: File verified at ${fullPath}`);
+        } catch (e) {
+            logDebug(`[save-note] CRITICAL ERROR: File write succeeded but file not found at ${fullPath}. Error: ${e.message}`);
+            throw new Error(`File write failed verification: ${e.message}`);
+        }
         
         return { success: true, note: { ...note, file: relativePath } };
     } catch (error) {
-        console.error('Failed to save note:', error);
+        logDebug(`[save-note] EXCEPTION: ${error.message}\n${error.stack}`);
+        console.error('[save-note] Failed to save note:', error);
         return { success: false, error: error.message };
     }
 });
@@ -127,7 +183,7 @@ ipcMain.handle('delete-note', async (event, noteId) => {
         // Quick scan
         const categories = await fs.readdir(projectPath, { withFileTypes: true });
         for (const cat of categories) {
-            if (cat.isDirectory()) {
+            if (cat.isDirectory() && !cat.name.startsWith('.')) {
                 const filePath = path.join(projectPath, cat.name, 'notes', `${noteId}.md`);
                 try {
                     await fs.access(filePath);
@@ -159,7 +215,9 @@ ipcMain.handle('get-categories', async () => {
     if (!projectPath) return [];
     try {
         const dirs = await fs.readdir(projectPath, { withFileTypes: true });
-        return dirs.filter(d => d.isDirectory()).map(d => d.name);
+        return dirs
+            .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+            .map(d => d.name);
     } catch (error) {
         return [];
     }

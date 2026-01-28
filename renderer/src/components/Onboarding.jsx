@@ -38,7 +38,7 @@ const Step = ({ title, children, icon: Icon, showIcon = true }) => (
     </div>
 );
 
-const Onboarding = ({ onComplete }) => {
+const Onboarding = ({ onComplete, initialPath }) => {
     const [step, setStep] = useState(0);
     const [projectPath, setProjectPath] = useState('');
     const [pin, setPin] = useState('');

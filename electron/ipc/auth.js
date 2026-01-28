@@ -15,13 +15,14 @@ const BCRYPT_ROUNDS = 12; // Increased from 10 for higher security
 let failedAttempts = 0;
 let selfDestructTimer = null;
 let isDestructing = false;
+let isSessionActive = false; // Tracks if the user has authenticated in this session
 
 ipcMain.handle('auth-status', async () => {
     const hasPin = store.has('auth.pinHash');
     const projectPath = store.get('project.path');
     
     return {
-        isSetup: !!(hasPin && projectPath),
+        isSetup: !!(hasPin && projectPath && isSessionActive),
         hasPin: !!hasPin,
         isLocked: !!hasPin, // Default locked if PIN exists
         projectPath: projectPath || null
@@ -31,6 +32,7 @@ ipcMain.handle('auth-status', async () => {
 ipcMain.handle('logout', async () => {
     // Clear project path to force re-selection (First Page)
     store.delete('project.path');
+    isSessionActive = false;
     return { success: true };
 });
 
@@ -120,8 +122,40 @@ ipcMain.handle('setup-auth', async (event, { pin, projectPath, username, avatar 
         store.set('auth.pinHash', hash);
         store.set('project.path', projectPath);
         store.set('user.username', username || 'User');
-        store.set('user.avatar', avatar || 'ava_01');
         store.set('auth.recoveryKeyHash', recoveryKeyHash); // Store hash of recovery key too
+        isSessionActive = true;
+        
+        // Handle Avatar (Copy to project folder if custom)
+        let finalAvatar = avatar || 'ava_01';
+        if (avatar && !avatar.startsWith('ava_') && !avatar.startsWith('http')) {
+            try {
+                // Ensure .noteq/avatars exists
+                const avatarsDir = path.join(projectPath, '.noteq', 'avatars');
+                await fs.mkdir(avatarsDir, { recursive: true });
+                
+                // Copy file
+                const ext = path.extname(avatar) || '.png';
+                const destName = `avatar_${Date.now()}${ext}`;
+                const destPath = path.join(avatarsDir, destName);
+                
+                // If avatar is base64 (from rendererFileReader), we need to write buffer
+                if (avatar.startsWith('data:')) {
+                    const base64Data = avatar.replace(/^data:image\/\w+;base64,/, "");
+                    await fs.writeFile(destPath, base64Data, 'base64');
+                } else {
+                    // It's a path
+                    await fs.copyFile(avatar, destPath);
+                }
+                
+                finalAvatar = path.join('.noteq', 'avatars', destName);
+            } catch (e) {
+                console.error('Failed to save avatar:', e);
+                // Fallback
+                finalAvatar = 'ava_01';
+            }
+        }
+        
+        store.set('user.avatar', finalAvatar);
         
         // Save portable auth file to project folder
         try {
@@ -131,7 +165,7 @@ ipcMain.handle('setup-auth', async (event, { pin, projectPath, username, avatar 
                 pinHash: hash,
                 recoveryKeyHash: recoveryKeyHash,
                 username: username || 'User',
-                avatar: avatar || 'ava_01',
+                avatar: finalAvatar,
                 updatedAt: new Date().toISOString()
             }, null, 2));
             
@@ -152,9 +186,24 @@ ipcMain.handle('setup-auth', async (event, { pin, projectPath, username, avatar 
 });
 
 ipcMain.handle('get-user-profile', async () => {
+    const avatar = store.get('user.avatar');
+    const projectPath = store.get('project.path');
+    
+    let fullAvatarPath = avatar;
+    if (avatar && !avatar.startsWith('http') && !avatar.startsWith('data:') && !store.get('user.avatar').startsWith('ava_')) {
+        // If it's a relative path (e.g. .noteq/avatars/...), resolve it
+        if (projectPath && !path.isAbsolute(avatar)) {
+            // Ensure we use the correct separator for the OS, but path.join handles that.
+            // However, local files in renderer might need file:// protocol if not using webSecurity: false (which we likely are for local resources)
+            // But usually just absolute path works if using preload or if security disabled. 
+            // Better to standardise.
+            fullAvatarPath = path.join(projectPath, avatar);
+        }
+    }
+
     return {
         username: store.get('user.username'),
-        avatar: store.get('user.avatar')
+        avatar: fullAvatarPath // Renderer Sidebar.jsx will prepend file:// if needed or handle it
     };
 });
 

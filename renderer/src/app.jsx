@@ -15,6 +15,7 @@ const Layout = () => {
   const { focusMode, isSetup, isLocked, authChecked, finishSetup, unlockApp, loginApp } = useApp();
   const [hasPin, setHasPin] = useState(false);
   const [checkingPin, setCheckingPin] = useState(true);
+  const [savedPath, setSavedPath] = useState('');
 
   // Check if PIN exists separately to route between Onboarding (New) and Landing (Login)
   useEffect(() => {
@@ -22,6 +23,7 @@ const Layout = () => {
         try {
             const status = await window.electron.invoke('auth-status');
             setHasPin(status.hasPin);
+            setSavedPath(status.projectPath);
         } catch (e) {
             console.error(e);
         } finally {
@@ -35,15 +37,10 @@ const Layout = () => {
       return <div className="h-screen w-full flex items-center justify-center bg-white dark:bg-slate-900 text-white">Loading...</div>;
   }
 
-  // Case 1: Fresh Install (No PIN) -> Onboarding
-  if (!hasPin) {
-      return <Onboarding onComplete={finishSetup} />;
-  }
-
-  // Case 2: Logged Out / No Project Selected -> Landing Page
-  // isSetup checks for (hasPin && projectPath). If false but hasPin is true, we are here.
+  // Unified Entry Point: Onboarding (Step 0)
+  // Handles both fresh install and logged out states
   if (!isSetup) {
-      return <LandingPage onOpenProject={loginApp} />;
+      return <Onboarding onComplete={finishSetup} initialPath={savedPath} />;
   }
 
   // Case 3: Locked -> Lock Screen

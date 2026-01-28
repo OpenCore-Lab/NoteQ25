@@ -92,8 +92,14 @@ const NotesList = () => {
         </div>
 
         <button 
-          onClick={addNote}
-          className="w-full py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary hover:border-primary/30 dark:hover:border-primary/30 hover:bg-primary/5 dark:hover:bg-primary/10 rounded-md font-medium text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm"
+          onClick={() => addNote()}
+          disabled={selectedCategory === 'All'}
+          className={clsx(
+            "w-full py-1.5 border rounded-md font-medium text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm",
+            selectedCategory === 'All' 
+              ? "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-70"
+              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary hover:border-primary/30 dark:hover:border-primary/30 hover:bg-primary/5 dark:hover:bg-primary/10"
+          )}
         >
           <Plus size={14} />
           <span>New Note</span>
@@ -151,7 +157,16 @@ const NotesList = () => {
               </p>
 
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 font-medium">{format(new Date(note.created_at), 'MMM d')}</span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {(() => {
+                    try {
+                      const date = new Date(note.created_at);
+                      return isNaN(date.getTime()) ? 'No Date' : format(date, 'MMM d');
+                    } catch {
+                      return 'No Date';
+                    }
+                  })()}
+                </span>
               </div>
             </div>
           ))

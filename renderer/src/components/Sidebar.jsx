@@ -67,8 +67,23 @@ const Sidebar = () => {
   }, []);
   
   const getAvatarSrc = (avatar) => {
+      if (!avatar) return ava01;
       if (AVATARS[avatar]) return AVATARS[avatar];
-      return avatar || ava01; // Fallback or custom path/base64
+      if (avatar.startsWith('data:')) return avatar;
+      
+      // Handle relative path from project root (saved in auth.js)
+      if (avatar.startsWith('.noteq')) {
+          // We need the absolute path. Since we don't have project path here easily, 
+          // we can rely on the IPC to serve it or just assume we can construct it if we knew the root.
+          // BUT, for local file access in Electron renderer, we need absolute path.
+          // The 'userProfile' state should ideally contain the full path or we need to fetch it.
+          // Let's check how we get userProfile. 
+          // We invoke 'get-user-profile'. Let's update that handler to return absolute path.
+          return `file://${avatar}`; // Placeholder, see below
+      }
+      
+      if (avatar.startsWith('/') || avatar.match(/^[a-zA-Z]:\\/)) return `file://${avatar}`; 
+      return ava01; 
   };
 
   const handleLogout = async () => {
