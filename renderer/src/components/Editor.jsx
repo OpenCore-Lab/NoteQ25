@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../store/AppContext';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import TextAlign from '@tiptap/extension-text-align';
@@ -12,6 +12,8 @@ import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, all } from 'lowlight';
 
 import { 
   Bold, Italic, Underline, List, ListOrdered, Image as ImageIcon, 
@@ -20,16 +22,22 @@ import {
   FileX, ChevronRight, Calendar, User, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, Link as LinkIcon, MoreHorizontal,
   CheckSquare, Highlighter, Palette, Undo, Redo, Heading1, Heading2, Heading3,
-  Save, Code, FileText
+  Save, Code, FileText, Terminal
 } from 'lucide-react';
 import { Markdown } from 'tiptap-markdown';
 import { clsx } from 'clsx';
 import { format, isToday, isYesterday } from 'date-fns';
 import toast from 'react-hot-toast';
 import ConfirmModal from './ConfirmModal';
+import InputModal from './InputModal';
+import EditorContextMenu from './EditorContextMenu';
+import CodeBlockComponent from './CodeBlockComponent';
 
 import CharacterCount from '@tiptap/extension-character-count';
 import { Extension, wrappingInputRule } from '@tiptap/core';
+
+// Initialize lowlight
+const lowlight = createLowlight(all);
 
 const AutoListExtension = Extension.create({
   name: 'autoList',
@@ -122,10 +130,6 @@ const LineHeightExtension = Extension.create({
     };
   },
 });
-
-// ... imports ...
-
-  // ...
 
 
 const TrashPopover = ({ onClose }) => {
@@ -393,7 +397,7 @@ const ToolbarButton = ({ onClick, isActive, icon, disabled = false, title }) => 
 );
 
 const Editor = () => {
-  const { selectedNote, updateNote, deleteNote, focusMode, setFocusMode, addNotification, tags, setUnsavedChanges } = useApp();
+  const { selectedNote, updateNote, deleteNote, focusMode, setFocusMode, addNotification, tags, setUnsavedChanges, unsavedChanges } = useApp();
   const [viewMode, setViewMode] = useState('visualize'); // 'visualize' | 'raw'
   const [rawContent, setRawContent] = useState('');
   const [isPreview, setIsPreview] = useState(false);
@@ -402,6 +406,12 @@ const Editor = () => {
   const addTagButtonRef = useRef(null);
   const [tagMenuPosition, setTagMenuPosition] = useState({ top: 0, left: 0 });
   const [tagSearch, setTagSearch] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
+  const [editorStyle, setEditorStyle] = useState({
+    fontFamily: 'Inter',
+    fontSize: '16px',
+    colorClass: 'text-slate-800 dark:text-slate-100'
+  });
   
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -410,6 +420,14 @@ const Editor = () => {
     message: '',
     onConfirm: () => {},
     type: 'danger'
+  });
+
+  const [inputModal, setInputModal] = useState({
+    isOpen: false,
+    title: '',
+    fields: [],
+    onConfirm: () => {},
+    submitText: 'Save'
   });
 
   const openConfirm = (title, message, onConfirm, type = 'danger') => {
@@ -424,11 +442,66 @@ const Editor = () => {
   const [title, setTitle] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [syncInterval, setSyncInterval] = useState('2m'); // auto, 2m, 15m, 30m
+  const [syncInterval, setSyncInterval] = useState('2m'); // 2m, 5m, 1h, manual
   const [charCount, setCharCount] = useState(0);
   
   // Force update for toolbar state
   const [, forceUpdate] = useState(0);
+
+  // Ref to hold the latest handleSave function to avoid stale closures in setInterval
+  const handleSaveRef = useRef(null);
+  // Ref to track programmatic updates to prevent autosave triggering on load
+  const isProgrammaticUpdate = useRef(false);
+
+  const loadSettings = async () => {
+    if (window.electron) {
+        try {
+            const settings = await window.electron.invoke('get-project-settings');
+            if (settings.autosaveInterval) {
+                setSyncInterval(settings.autosaveInterval);
+            }
+            if (settings.fontFamily || settings.fontSize || settings.fontColor) {
+                setEditorStyle({
+                    fontFamily: settings.fontFamily || 'Inter',
+                    fontSize: settings.fontSize || '16px',
+                    colorClass: settings.fontColor || 'text-slate-800 dark:text-slate-100'
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load project settings', e);
+        }
+    }
+  };
+
+  // Load project settings on mount and listen for updates
+  useEffect(() => {
+    loadSettings();
+    
+    const handleSettingsUpdate = (e) => {
+        const settings = e.detail;
+        if (settings) {
+            if (settings.autosaveInterval) setSyncInterval(settings.autosaveInterval);
+            setEditorStyle({
+                fontFamily: settings.fontFamily || 'Inter',
+                fontSize: settings.fontSize || '16px',
+                colorClass: settings.fontColor || 'text-slate-800 dark:text-slate-100'
+            });
+        }
+    };
+
+    window.addEventListener('project-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('project-settings-updated', handleSettingsUpdate);
+  }, [selectedNote?.id]);
+
+  const handleIntervalChange = async (e) => {
+      const newVal = e.target.value;
+      setSyncInterval(newVal);
+      if (window.electron) {
+          // Fetch current settings to preserve other fields
+          const current = await window.electron.invoke('get-project-settings');
+          await window.electron.invoke('save-project-settings', { ...current, autosaveInterval: newVal });
+      }
+  };
 
   const editor = useEditor({
     extensions: [
@@ -441,6 +514,46 @@ const Editor = () => {
           keepMarks: true,
           keepAttributes: false,
         },
+        codeBlock: false, // Disable default codeBlock to use lowlight
+      }),
+      CodeBlockLowlight.configure({
+        lowlight,
+        defaultLanguage: null,
+      }).extend({
+        addAttributes() {
+          return {
+            language: {
+              default: null,
+            },
+          };
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(CodeBlockComponent);
+        },
+        // IMPORTANT: Move Markdown Logic directly into the Node Extension
+        // This is the standard way for tiptap-markdown to pick it up reliably
+        renderMarkdown(state, node) {
+             const lang = node.attrs.language;
+             state.ensureNewLine();
+             state.write('```' + (lang || '') + '\n');
+             state.text(node.textContent, false);
+             state.ensureNewLine();
+             state.write('```');
+             state.closeBlock(node);
+        },
+        parseMarkdown: {
+             fence: {
+                 block: 'codeBlock',
+                 getAttrs: token => {
+                     const info = token.info ? token.info.trim() : '';
+                     // Handle legacy format (lang:theme) by taking just the first part
+                     const lang = info.split(':')[0] || null;
+                     return {
+                         language: lang
+                     };
+                 }
+             }
+        }
       }),
       Image,
       UnderlineExtension,
@@ -458,7 +571,8 @@ const Editor = () => {
       Markdown.configure({
         html: false,
         transformPastedText: true,
-        transformCopiedText: true
+        transformCopiedText: true,
+        // Removed custom extensions override to rely on Node extension logic
       }),
     ],
     content: '',
@@ -467,12 +581,18 @@ const Editor = () => {
         forceUpdate(n => n + 1);
     },
     onUpdate: ({ editor }) => {
+      // Skip change detection if this update was triggered programmatically (e.g. loading a note)
+      if (isProgrammaticUpdate.current) return;
+
       const md = editor.storage.markdown.getMarkdown();
       const text = editor.getText();
       setCharCount(editor.storage.characterCount.characters());
       
       // Only mark dirty if content ACTUALLY changed from what we loaded
-      if (selectedNote && md !== selectedNote.content) {
+      // Normalize comparison to avoid false positives (e.g. trailing newlines)
+      const normalize = (str) => (str || '').replace(/\r\n/g, '\n').trim();
+      
+      if (selectedNote && normalize(md) !== normalize(selectedNote.content)) {
           setUnsavedChanges(true); // Mark as dirty
           
           updateNote({
@@ -490,41 +610,14 @@ const Editor = () => {
     },
   });
 
-  // Auto-save interval
-  useEffect(() => {
-    if (syncInterval === 'auto') return; // Handled by debounce if we implemented it, or manual only? User said "auto, 2 min...". "Auto" usually means debounce.
-    // Let's interpret "Auto" as "Smart/Debounce" and others as fixed intervals.
-    // For now, if "auto", we can default to 2m or implement debounce.
-    // Let's stick to the requested explicit intervals.
-    
-    let ms = 2 * 60 * 1000;
-    if (syncInterval === '15m') ms = 15 * 60 * 1000;
-    if (syncInterval === '30m') ms = 30 * 60 * 1000;
-    
-    const interval = setInterval(() => {
-        if (selectedNote) {
-            handleSave();
-        }
-    }, ms);
-
-    return () => clearInterval(interval);
-  }, [selectedNote, title, syncInterval]); 
-
-  // Debounce for "Auto" mode
-  useEffect(() => {
-      if (syncInterval !== 'auto') return;
-      
-      const timeout = setTimeout(() => {
-          if (selectedNote) handleSave();
-      }, 5000); // 5 seconds debounce
-      
-      return () => clearTimeout(timeout);
-  }, [editor?.getHTML(), title, syncInterval]);
-
   const handleSave = async () => {
       if (!selectedNote) return;
       setIsSaving(true);
       try {
+          // Force get latest markdown from editor directly to avoid stale state
+          const currentContent = editor?.storage.markdown?.getMarkdown() || '';
+          const currentText = editor?.getText() || '';
+          
           // Determine content to save based on view mode
           let noteUpdate = {
               ...selectedNote,
@@ -538,34 +631,102 @@ const Editor = () => {
               noteUpdate.preview = rawContent.substring(0, 100);
           } else {
               // In Visualize mode, use editor Markdown
-              noteUpdate.content = editor?.storage.markdown.getMarkdown() || selectedNote.content;
-              noteUpdate.preview = editor?.getText().substring(0, 100) || selectedNote.preview;
+              // CRITICAL: Ensure we are sending the actual editor content
+              noteUpdate.content = currentContent;
+              noteUpdate.preview = currentText.substring(0, 100);
           }
+          
+          // Log for debugging (optional, removed in prod)
+          // console.log('Saving note content:', noteUpdate.content);
 
           // Force save to disk
           await updateNote(noteUpdate, true); 
           
           setLastSaved(new Date());
           setUnsavedChanges(false); // Mark as clean
-          // toast.success('Saved'); // Too noisy for auto-save
       } catch (e) {
-          console.error(e);
+          console.error('Save failed:', e);
+          toast.error('Failed to save note');
       } finally {
           setIsSaving(false);
       }
   };
 
+  // Update ref whenever handleSave changes (which depends on state like title, editor content)
+  useEffect(() => {
+      handleSaveRef.current = handleSave;
+  }, [handleSave]);
+
+  // Auto-save interval logic
+  useEffect(() => {
+    if (syncInterval === 'manual') return; 
+    
+    let ms = 2 * 60 * 1000; // Default 2m
+    if (syncInterval === '5m') ms = 5 * 60 * 1000;
+    if (syncInterval === '1h') ms = 60 * 60 * 1000;
+    
+    const interval = setInterval(() => {
+        // Only autosave if there are unsaved changes
+        if (handleSaveRef.current && selectedNote && unsavedChanges) {
+            handleSaveRef.current();
+        }
+    }, ms);
+
+    return () => clearInterval(interval);
+  }, [selectedNote?.id, syncInterval, unsavedChanges]); // Add unsavedChanges dependency
+
   const setLink = useCallback(() => {
     if (!editor) return;
+    const { from, to } = editor.state.selection;
+    const isTextSelected = from < to;
     const previousUrl = editor.getAttributes('link').href || '';
-    const url = window.prompt('URL', previousUrl);
 
-    if (url === null) return;
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
+    const fields = [];
+    if (!isTextSelected) {
+        fields.push({ name: 'text', label: 'Anchor Text', placeholder: 'Enter text to link', autoFocus: true });
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    fields.push({ name: 'url', label: 'Link URL', placeholder: 'https://example.com', defaultValue: previousUrl, icon: <LinkIcon size={14}/> });
+
+    setInputModal({
+        isOpen: true,
+        title: isTextSelected ? 'Edit Link' : 'Insert Link',
+        fields,
+        submitText: 'Save Link',
+        onConfirm: (values) => {
+            let url = values.url;
+            // Basic URL validation/fix
+            if (url && !/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+            }
+
+            if (!url) {
+                editor.chain().focus().extendMarkRange('link').unsetLink().run();
+                return;
+            }
+
+            if (isTextSelected) {
+                editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+            } else {
+                if (values.text) {
+                     editor.chain().focus().insertContent({
+                        type: 'text',
+                        text: values.text,
+                        marks: [{ type: 'link', attrs: { href: url } }]
+                     }).run();
+                }
+            }
+        }
+    });
+  }, [editor]);
+
+  const toggleCodeBlock = useCallback(() => {
+      if (!editor) return;
+      editor.chain().focus().toggleCodeBlock().run();
+  }, [editor]);
+
+  const setCodeLanguage = useCallback((lang) => {
+      if (!editor) return;
+      editor.chain().focus().updateAttributes('codeBlock', { language: lang }).run();
   }, [editor]);
 
   // Intelligent List Toggle (Prevents "Whole Page" bugs)
@@ -650,6 +811,73 @@ const Editor = () => {
     editor.chain().focus().setLineHeight(height).run();
   }, [editor]);
 
+  const handleContextMenu = (e) => {
+      e.preventDefault();
+      const x = e.clientX;
+      const y = e.clientY;
+      setContextMenu({ x, y });
+  };
+
+  const handleContextMenuAction = async (action) => {
+      setContextMenu(null);
+      if (!editor) return;
+      
+      editor.chain().focus().run(); // Ensure focus
+
+      switch(action) {
+          case 'paste-formatted':
+              try {
+                  const items = await navigator.clipboard.read();
+                  let hasHtml = false;
+                  for (const item of items) {
+                      if (item.types.includes('text/html')) {
+                          const blob = await item.getType('text/html');
+                          const html = await blob.text();
+                          editor.commands.insertContent(html);
+                          hasHtml = true;
+                          break;
+                      }
+                  }
+                  if (!hasHtml) {
+                      // Fallback to text
+                      const text = await navigator.clipboard.readText();
+                      editor.commands.insertContent(text);
+                  }
+              } catch (e) {
+                  console.error("Paste failed", e);
+                  // Fallback to simple readText if permissions fail
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    editor.commands.insertContent(text);
+                  } catch (err) {
+                    toast.error("Could not paste from clipboard");
+                  }
+              }
+              break;
+          case 'paste-plain':
+              try {
+                  const text = await navigator.clipboard.readText();
+                  editor.commands.insertContent(text);
+              } catch (e) {
+                  toast.error("Could not read clipboard");
+              }
+              break;
+          case 'remove-formatting':
+              editor.chain().focus().unsetAllMarks().clearNodes().run();
+              break;
+          case 'clear-all':
+              openConfirm(
+                  'Clear All Formatting',
+                  'Are you sure you want to clear all formatting? This will reset the document to plain paragraphs.',
+                  () => {
+                      editor.chain().focus().selectAll().unsetAllMarks().clearNodes().run();
+                  },
+                  'danger'
+              );
+              break;
+      }
+  };
+
   // Sync editor with selected note
   useEffect(() => {
     if (selectedNote && editor) {
@@ -661,10 +889,22 @@ const Editor = () => {
       // We check against current editor markdown
       const currentMd = editor.storage.markdown.getMarkdown();
       
-      if (currentMd !== selectedNote.content) {
-        editor.commands.setContent(selectedNote.content || '');
-        // Reset dirty state only when content is programmatically loaded/replaced
-        setTimeout(() => setUnsavedChanges(false), 0);
+      // Normalize comparison to prevent unnecessary reloads
+      const normalize = (str) => (str || '').replace(/\r\n/g, '\n').trim();
+
+      if (normalize(currentMd) !== normalize(selectedNote.content)) {
+        // Flag this as a programmatic update to skip onUpdate logic
+        isProgrammaticUpdate.current = true;
+        
+        // Use contentType: 'markdown' to ensure proper parsing of code blocks and other MD syntax
+        editor.commands.setContent(selectedNote.content || '', { contentType: 'markdown' });
+        
+        // Reset flags after Tiptap has processed the content
+        // Increased timeout to ensure all internal Tiptap events have fired
+        setTimeout(() => {
+             isProgrammaticUpdate.current = false;
+             setUnsavedChanges(false); 
+        }, 100);
       }
     }
   }, [selectedNote?.id, selectedNote?.content, selectedNote?.title, editor]);
@@ -969,9 +1209,10 @@ const Editor = () => {
                             <ToolbarButton onClick={() => toggleList('taskList', 'taskItem')} isActive={editor?.isActive('taskList')} icon={<CheckSquare size={14} />} title="Checklist" />
                         </div>
                         
-                        {/* Media */}
+                        {/* Media & Code */}
                         <div className="flex items-center gap-0.5">
                             <ToolbarButton onClick={addImage} icon={<ImageIcon size={14} />} title="Insert Image" />
+                            <ToolbarButton onClick={toggleCodeBlock} isActive={editor?.isActive('codeBlock')} icon={<Terminal size={14} />} title="Code Block" />
                         </div>
                         </>
                      ) : (
@@ -995,7 +1236,7 @@ const Editor = () => {
                         title="Visualize Mode (Rich Text)"
                     >
                         <Eye size={14} />
-                        <span className="hidden sm:inline">Visualize</span>
+                        <span className="hidden sm:inline"></span>
                     </button>
                     <button 
                         onClick={() => viewMode === 'visualize' && toggleViewMode()}
@@ -1005,79 +1246,122 @@ const Editor = () => {
                                 ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
                                 : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                         )}
-                        title="Raw Mode (Markdown Source)"
+                        title="Raw Markdown Mode"
                     >
                         <Code size={14} />
-                        <span className="hidden sm:inline">Raw</span>
+                        <span className="hidden sm:inline"></span>
                     </button>
                  </div>
             </div>
 
-            {/* Editor Content or Raw Textarea */}
-            {viewMode === 'visualize' ? (
-                <EditorContent editor={editor} className="min-h-[400px] text-base leading-relaxed text-slate-700 dark:text-slate-300" />
-            ) : (
-                <textarea
-                    value={rawContent}
-                    onChange={handleRawChange}
-                    className="w-full min-h-[500px] p-4 font-mono text-sm bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-200 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y leading-relaxed"
-                    placeholder="# Start writing markdown..."
-                />
-            )}
+            {/* Editor Content Area */}
+            <div 
+                className={clsx(
+                    "min-h-[500px] pb-32 transition-colors duration-300",
+                    viewMode === 'raw' ? "font-mono" : "",
+                    editorStyle.colorClass
+                )}
+                style={{
+                    fontFamily: viewMode === 'raw' ? 'monospace' : editorStyle.fontFamily,
+                    fontSize: editorStyle.fontSize
+                }}
+                onContextMenu={handleContextMenu}
+            >
+                {viewMode === 'visualize' ? (
+                   <EditorContent editor={editor} />
+                ) : (
+                   <textarea 
+                     value={rawContent}
+                     onChange={handleRawChange}
+                     className={clsx(
+                        "w-full h-full min-h-[500px] bg-transparent resize-none focus:outline-none leading-relaxed p-0",
+                        editorStyle.colorClass
+                     )}
+                     style={{
+                        fontFamily: 'monospace',
+                        fontSize: editorStyle.fontSize
+                     }}
+                     placeholder="Start writing..."
+                   />
+                )}
+            </div>
         </div>
       </div>
-
-      {/* Footer Status Bar */}
-      <div className="h-9 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 text-xs select-none no-drag">
-        <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
-           <span className="font-variant-numeric tabular-nums">{charCount} characters</span>
-           {lastSaved && <span>Saved: {format(lastSaved, 'h:mm:ss a')}</span>}
-        </div>
-        
-        <div className="flex items-center gap-3">
-           <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/50 rounded p-0.5 border border-slate-200 dark:border-slate-700 relative">
-              {/* Dynamic Sync Button Logic */}
-              <button
-                onClick={() => setSyncInterval(syncInterval === 'auto' ? '2m' : 'auto')}
-                className={clsx(
-                    "px-2 py-0.5 rounded text-[10px] font-medium transition-all uppercase flex items-center gap-1",
-                    "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
-                )}
-                title="Click to toggle Auto/Interval"
-              >
-                {syncInterval === 'auto' ? 'Auto' : `Auto ${syncInterval}`}
-              </button>
-              
-              {/* Simplified interval selection for now, or use context menu if requested. 
-                  User asked for "Syncbutton right click - show Many called Auto and Hit & Save".
-                  Let's implement a simple dropdown for intervals.
-              */}
-              <select 
-                value={syncInterval} 
-                onChange={(e) => setSyncInterval(e.target.value)}
-                className="absolute opacity-0 inset-0 cursor-pointer"
-                title="Right click or click to change interval"
-              >
-                 <option value="auto">Auto (Smart)</option>
-                 <option value="2m">Auto (2 min)</option>
-                 <option value="15m">Auto (15 min)</option>
-                 <option value="30m">Auto (30 min)</option>
-              </select>
-           </div>
-           
-           <button 
-             onClick={handleSave}
-             disabled={isSaving}
-             className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
-             title="Hit & Save"
-           >
-             <RefreshCw size={12} className={clsx(isSaving && "animate-spin")} />
-             <span className="font-medium">Sync</span>
-           </button>
-        </div>
+      
+      {/* Footer (Fixed outside scrollable area) */}
+      <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between select-none z-40 transition-colors">
+            <div className="flex items-center gap-4 text-[10px] text-slate-400">
+                    <span>{charCount} characters</span>
+                    <span>{editor?.storage.characterCount?.words() || 0} words</span>
+            </div>
+            <div className="flex items-center gap-3">
+                    {/* Only show selector if in Auto mode or logic requires it. 
+                        User asked: "If Autosaving meachnism on then HIt Save toggle will be disabled, if hit and save is on then auto savingmeachnism will be turned of"
+                        This implies strict separation. 
+                        If syncInterval === 'manual', we show Hit and Save button.
+                        If syncInterval !== 'manual', we show Auto save indicator.
+                    */}
+                    
+                    {syncInterval !== 'manual' ? (
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={syncInterval}
+                                onChange={handleIntervalChange}
+                                className="bg-transparent border-none text-[10px] text-slate-400 focus:ring-0 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                                title="Auto-save Interval"
+                            >
+                                <option value="2m">Auto (2 min)</option>
+                                <option value="5m">Auto (5 min)</option>
+                                <option value="1h">Auto (1 hour)</option>
+                            </select>
+                            
+                            <div className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
+                            
+                            {isSaving ? (
+                                <span className="text-blue-500 animate-pulse text-[10px]">Saving...</span>
+                            ) : (
+                                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500/50" />
+                                    Saved {lastSaved ? format(lastSaved, 'h:mm a') : ''}
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        /* Manual Mode: Show Hit and Save Button */
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 mr-2">Manual Mode</span>
+                            <div className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
+                            
+                            {isSaving ? (
+                                <span className="text-blue-500 animate-pulse text-[10px]">Saving...</span>
+                            ) : (
+                                <>
+                                    {lastSaved && !unsavedChanges && (
+                                        <span className="text-[10px] text-slate-400">
+                                            Saved {format(lastSaved, 'h:mm a')}
+                                        </span>
+                                    )}
+                                    <button 
+                                        onClick={handleSave}
+                                        disabled={!unsavedChanges}
+                                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
+                                            unsavedChanges 
+                                            ? 'text-white bg-red-500 hover:bg-red-600 shadow-sm animate-pulse cursor-pointer' 
+                                            : 'text-slate-400 bg-slate-100 dark:bg-slate-800 cursor-default opacity-50'
+                                        }`}
+                                    >
+                                        <Save size={10} />
+                                        {unsavedChanges ? 'Hit to Save' : 'Saved'}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
+            </div>
       </div>
     </div>
-    
+
+    {/* Modals & Popups */}
     <ConfirmModal 
         isOpen={confirmModal.isOpen}
         onClose={closeConfirm}
@@ -1085,6 +1369,22 @@ const Editor = () => {
         title={confirmModal.title}
         message={confirmModal.message}
         type={confirmModal.type}
+    />
+
+    <InputModal
+        isOpen={inputModal.isOpen}
+        onClose={() => setInputModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={inputModal.onConfirm}
+        title={inputModal.title}
+        fields={inputModal.fields}
+        submitText={inputModal.submitText}
+    />
+
+    <EditorContextMenu
+        position={contextMenu}
+        onClose={() => setContextMenu(null)}
+        onAction={handleContextMenuAction}
+        selectionEmpty={editor?.state.selection.empty}
     />
     </>
   );

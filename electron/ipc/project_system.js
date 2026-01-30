@@ -265,3 +265,33 @@ ipcMain.handle('save-image', async (event, { filePath, category } = {}) => {
 });
 
 module.exports = { getProjectPath };
+
+ipcMain.handle('save-project-settings', async (event, settings) => {
+    const projectPath = getProjectPath();
+    if (!projectPath) return { success: false, error: 'No project open' };
+
+    const settingsDir = path.join(projectPath, '.noteq');
+    const settingsFile = path.join(settingsDir, 'settings.json');
+
+    try {
+        await fs.mkdir(settingsDir, { recursive: true });
+        await fs.writeFile(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-project-settings', async () => {
+    const projectPath = getProjectPath();
+    if (!projectPath) return {};
+
+    const settingsFile = path.join(projectPath, '.noteq', 'settings.json');
+    try {
+        const data = await fs.readFile(settingsFile, 'utf-8');
+        return JSON.parse(data);
+    } catch (error) {
+        return {}; // Return empty if not found
+    }
+});
+

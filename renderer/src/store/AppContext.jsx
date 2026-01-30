@@ -29,6 +29,14 @@ export const AppProvider = ({ children }) => {
     }
     return 'light';
   });
+  
+  // Color Theme State
+  const [colorTheme, setColorTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('colorTheme') || 'theme-charlie-blue';
+    }
+    return 'theme-charlie-blue';
+  });
 
   // Notification History State
   const [notifications, setNotifications] = useState([]);
@@ -81,8 +89,27 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Apply Color Theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    // Remove all known theme classes
+    const themeClasses = [
+      'theme-charlie-blue', 'theme-emerald-green', 'theme-crimson-red',
+      'theme-royal-purple', 'theme-sunset-orange', 'theme-ocean-teal',
+      'theme-berry-pink', 'theme-amber-gold', 'theme-indigo-violet',
+      'theme-graphite-grey', 'theme-midnight-navy'
+    ];
+    root.classList.remove(...themeClasses);
+    root.classList.add(colorTheme);
+    localStorage.setItem('colorTheme', colorTheme);
+  }, [colorTheme]);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  const changeColorTheme = (newTheme) => {
+    setColorTheme(newTheme);
   };
 
   const addNotification = (notification) => {
@@ -542,8 +569,11 @@ The editor supports left, center, right, and justified alignment.
       setSortOption,
       focusMode,
       setFocusMode,
+      loading,
       theme,
       toggleTheme,
+      colorTheme,
+      changeColorTheme,
       notifications,
       addNotification,
       clearNotifications

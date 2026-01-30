@@ -9,6 +9,7 @@ import 'react-calendar/dist/Calendar.css';
 import { format, isSameDay, parseISO } from 'date-fns';
 import TrashModal from './TrashModal';
 import ConfirmModal from './ConfirmModal';
+import SettingsModal from './SettingsModal';
 import toast, { Toaster } from 'react-hot-toast';
 
 import ava01 from '../../assets/ava_01.jpg';
@@ -47,6 +48,7 @@ const Sidebar = () => {
   const [showTrashModal, setShowTrashModal] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const [showSettings, setShowSettings] = useState(false);
   const moreButtonRef = useRef(null);
   
   // Profile State
@@ -533,6 +535,7 @@ const Sidebar = () => {
         </div>
 
         <button 
+          onClick={() => setShowSettings(true)}
           className="p-2 text-white/60 hover:text-white hover:bg-white/5 dark:hover:bg-slate-900/50 rounded-md transition-colors"
           title="Settings"
         >
@@ -541,7 +544,8 @@ const Sidebar = () => {
       </div>
     </div>
 
-    {/* Trash Modal */}
+    {/* Modals */}
+    {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     {showTrashModal && <TrashModal onClose={() => setShowTrashModal(false)} />}
     
     <ConfirmModal 

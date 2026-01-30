@@ -1,8 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Lato:wght@100;300;400;700;900&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:wght@300;400;500;600;700&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  /* Default: Charlie Blue (#2563EB -> 37 99 235) */
+  --color-primary: 37 99 235;
+}
+
+/* Theme Classes - Setting the CSS Variable */
+.theme-charlie-blue { --color-primary: 37 99 235; } /* #2563EB */
+.theme-emerald-green { --color-primary: 5 150 105; } /* #059669 */
+.theme-crimson-red { --color-primary: 220 38 38; } /* #DC2626 */
+.theme-royal-purple { --color-primary: 124 58 237; } /* #7C3AED */
+.theme-sunset-orange { --color-primary: 234 88 12; } /* #EA580C */
+.theme-ocean-teal { --color-primary: 13 148 136; } /* #0D9488 */
+.theme-berry-pink { --color-primary: 219 39 119; } /* #DB2777 */
+.theme-amber-gold { --color-primary: 217 119 6; } /* #D97706 */
+.theme-indigo-violet { --color-primary: 79 70 229; } /* #4F46E5 */
+.theme-graphite-grey { --color-primary: 82 82 82; } /* #525252 */
+.theme-midnight-navy { --color-primary: 30 58 138; } /* #1E3A8A */
 
 /* Editor Lists Fix */
 .ProseMirror ul {
@@ -54,7 +72,7 @@ html, body, #root {
 
 body {
   font-family: 'Poppins', sans-serif;
-  @apply bg-background text-slate-800 dark:bg-slate-900 dark:text-slate-100;
+  @apply bg-background text-slate-800 dark:bg-slate-950 dark:text-slate-200;
 }
 
 /* Custom Scrollbar */
@@ -174,4 +192,195 @@ body {
   height: 4px;
   background-color: #4ade80; /* Green dot */
   border-radius: 50%;
+}
+
+/* Code Block Highlighting (Atom One Dark inspired) */
+/* Reset default Tiptap/ProseMirror pre styles to avoid conflicts */
+.ProseMirror pre {
+  background: none;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  font-family: inherit;
+}
+
+.ProseMirror code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Link Styling */
+.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.ProseMirror a:hover {
+  color: #1d4ed8;
+}
+
+.dark .ProseMirror a {
+  color: #60a5fa;
+}
+
+.dark .ProseMirror a:hover {
+  color: #93c5fd;
+}
+
+/* Code Block Themes */
+
+/* Base (Atom One Dark - Default) */
+.theme-atom-one-dark pre { background: #282c34; color: #abb2bf; }
+.theme-atom-one-dark .code-block-header { background: #21252b; border-bottom: 1px solid #3b4048; color: #abb2bf; }
+.theme-atom-one-dark .code-block-wrapper { border-color: #3b4048; }
+.theme-atom-one-dark .hljs-comment { color: #5c6370; font-style: italic; }
+.theme-atom-one-dark .hljs-keyword { color: #c678dd; }
+.theme-atom-one-dark .hljs-section { color: #e06c75; }
+.theme-atom-one-dark .hljs-literal { color: #56b6c2; }
+.theme-atom-one-dark .hljs-string { color: #98c379; }
+.theme-atom-one-dark .hljs-title { color: #61aeee; }
+.theme-atom-one-dark .hljs-variable { color: #d19a66; }
+
+/* Dracula */
+.theme-dracula pre { background: #282a36; color: #f8f8f2; }
+.theme-dracula .code-block-header { background: #21222c; border-bottom: 1px solid #6272a4; color: #f8f8f2; }
+.theme-dracula .code-block-wrapper { border-color: #6272a4; }
+.theme-dracula .hljs-comment { color: #6272a4; }
+.theme-dracula .hljs-keyword { color: #ff79c6; }
+.theme-dracula .hljs-section { color: #bd93f9; }
+.theme-dracula .hljs-literal { color: #bd93f9; }
+.theme-dracula .hljs-string { color: #f1fa8c; }
+.theme-dracula .hljs-title { color: #50fa7b; }
+.theme-dracula .hljs-variable { color: #8be9fd; }
+
+/* GitHub Dark */
+.theme-github-dark pre { background: #0d1117; color: #c9d1d9; }
+.theme-github-dark .code-block-header { background: #010409; border-bottom: 1px solid #30363d; color: #c9d1d9; }
+.theme-github-dark .code-block-wrapper { border-color: #30363d; }
+.theme-github-dark .hljs-comment { color: #8b949e; }
+.theme-github-dark .hljs-keyword { color: #ff7b72; }
+.theme-github-dark .hljs-section { color: #79c0ff; }
+.theme-github-dark .hljs-literal { color: #79c0ff; }
+.theme-github-dark .hljs-string { color: #a5d6ff; }
+.theme-github-dark .hljs-title { color: #d2a8ff; }
+.theme-github-dark .hljs-variable { color: #ffa657; }
+
+/* GitHub Light */
+.theme-github-light pre { background: #ffffff; color: #24292e; border: none; }
+.theme-github-light .code-block-header { background: #f6f8fa; border-bottom: 1px solid #d1d5da; color: #24292e; }
+.theme-github-light .code-block-wrapper { border-color: #e1e4e8; }
+.theme-github-light .hljs-comment { color: #6a737d; }
+.theme-github-light .hljs-keyword { color: #d73a49; }
+.theme-github-light .hljs-section { color: #005cc5; }
+.theme-github-light .hljs-literal { color: #005cc5; }
+.theme-github-light .hljs-string { color: #032f62; }
+.theme-github-light .hljs-title { color: #6f42c1; }
+.theme-github-light .hljs-variable { color: #e36209; }
+
+/* Solarized Dark */
+.theme-solarized-dark pre { background: #002b36; color: #839496; }
+.theme-solarized-dark .code-block-header { background: #00212b; border-bottom: 1px solid #586e75; color: #839496; }
+.theme-solarized-dark .code-block-wrapper { border-color: #586e75; }
+.theme-solarized-dark .hljs-comment { color: #586e75; }
+.theme-solarized-dark .hljs-keyword { color: #859900; }
+.theme-solarized-dark .hljs-section { color: #cb4b16; }
+.theme-solarized-dark .hljs-literal { color: #2aa198; }
+.theme-solarized-dark .hljs-string { color: #2aa198; }
+.theme-solarized-dark .hljs-title { color: #268bd2; }
+.theme-solarized-dark .hljs-variable { color: #b58900; }
+
+/* Monokai */
+.theme-monokai pre { background: #272822; color: #f8f8f2; }
+.theme-monokai .code-block-header { background: #1e1f1c; border-bottom: 1px solid #49483e; color: #f8f8f2; }
+.theme-monokai .code-block-wrapper { border-color: #49483e; }
+.theme-monokai .hljs-comment { color: #75715e; }
+.theme-monokai .hljs-keyword { color: #f92672; }
+.theme-monokai .hljs-section { color: #a6e22e; }
+.theme-monokai .hljs-literal { color: #ae81ff; }
+.theme-monokai .hljs-string { color: #e6db74; }
+.theme-monokai .hljs-title { color: #a6e22e; }
+.theme-monokai .hljs-variable { color: #fd971f; }
+
+/* Nord */
+.theme-nord pre { background: #2e3440; color: #d8dee9; }
+.theme-nord .code-block-header { background: #272c36; border-bottom: 1px solid #434c5e; color: #d8dee9; }
+.theme-nord .code-block-wrapper { border-color: #434c5e; }
+.theme-nord .hljs-comment { color: #4c566a; }
+.theme-nord .hljs-keyword { color: #81a1c1; }
+.theme-nord .hljs-section { color: #88c0d0; }
+.theme-nord .hljs-literal { color: #b48ead; }
+.theme-nord .hljs-string { color: #a3be8c; }
+.theme-nord .hljs-title { color: #8fbcbb; }
+.theme-nord .hljs-variable { color: #d08770; }
+
+/* Syntax Highlighting Colors (Fallback/Base) */
+.hljs-comment,
+.hljs-quote {
+  color: #5c6370;
+  font-style: italic;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula {
+  color: #c678dd;
+}
+
+.hljs-section,
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst {
+  color: #e06c75;
+}
+
+.hljs-literal {
+  color: #56b6c2;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta-string {
+  color: #98c379;
+}
+
+.hljs-built_in,
+.hljs-class .hljs-title {
+  color: #e6c07b;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-number {
+  color: #d19a66;
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-title {
+  color: #61aeee;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-link {
+  text-decoration: underline;
 }
