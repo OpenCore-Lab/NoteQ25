@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/react';
 import { Check, Copy, Code2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useApp } from '../store/AppContext';
-import { debounce } from 'lodash';
 
-const CodeBlockComponent = ({ node, updateAttributes, extension }) => {
+const CodeBlockComponent = ({ node }) => {
   const { theme: appTheme } = useApp();
   const [copied, setCopied] = useState(false);
-  const [detectedLang, setDetectedLang] = useState(node.attrs.language || 'plaintext');
 
   // Determine theme based on app theme
   // User request: Github Dark if light mode, Github Light if dark mode
@@ -22,33 +20,6 @@ const CodeBlockComponent = ({ node, updateAttributes, extension }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Auto-detect language
-  const detectLanguage = useCallback(
-    debounce((content) => {
-      if (!content || !extension.options.lowlight) return;
-      
-      try {
-        const result = extension.options.lowlight.highlightAuto(content);
-        if (result && result.data && result.data.language) {
-          const lang = result.data.language;
-          if (lang !== node.attrs.language) {
-            updateAttributes({ language: lang });
-            setDetectedLang(lang);
-          }
-        }
-      } catch (error) {
-        console.warn('Language detection failed:', error);
-      }
-    }, 1000),
-    [extension.options.lowlight, updateAttributes, node.attrs.language]
-  );
-
-  useEffect(() => {
-    detectLanguage(node.textContent);
-    // Cancel debounce on unmount
-    return () => detectLanguage.cancel();
-  }, [node.textContent, detectLanguage]);
-
   return (
     <NodeViewWrapper className={`code-block-wrapper relative group my-6 rounded-lg overflow-hidden border shadow-sm transition-all duration-200 theme-${codeBlockTheme}`}>
       {/* Header Bar */}
@@ -58,7 +29,7 @@ const CodeBlockComponent = ({ node, updateAttributes, extension }) => {
       >
         <div className="flex items-center gap-2 text-xs opacity-70">
             <Code2 size={14} />
-            <span className="font-medium uppercase tracking-wider">{node.attrs.language || 'Plain Text'}</span>
+            <span className="font-medium uppercase tracking-wider">Code</span>
         </div>
 
         <button 

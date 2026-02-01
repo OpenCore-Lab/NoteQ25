@@ -31,7 +31,7 @@ const THEMES = [
 ];
 
 const SettingsModal = ({ onClose }) => {
-  const { colorTheme, changeColorTheme } = useApp();
+  const { theme, colorTheme, changeColorTheme } = useApp();
   const [activeTab, setActiveTab] = useState('editor');
   const [settings, setSettings] = useState({
     fontFamily: 'Inter',
@@ -230,27 +230,39 @@ const SettingsModal = ({ onClose }) => {
             {activeTab === 'theme' && (
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">Application Theme</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {THEMES.map((theme) => (
-                      <button
-                        key={theme.id}
-                        onClick={() => changeColorTheme(theme.id)}
-                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left group ${colorTheme === theme.id ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-1 ring-primary' : 'border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                      >
-                        <div 
-                          className="w-8 h-8 rounded-full shadow-sm shrink-0 flex items-center justify-center text-white"
-                          style={{ backgroundColor: theme.color }}
-                        >
-                          {colorTheme === theme.id && <Check size={14} strokeWidth={3} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-900 dark:text-white truncate">{theme.name}</div>
-                          <div className="text-[10px] text-slate-400 uppercase tracking-wider">{theme.color}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">Color Theme</h3>
+                  
+                  {theme === 'dark' ? (
+                      <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                          <p className="text-sm text-slate-600 dark:text-slate-300 font-medium mb-1">
+                              Now it's Dark Mode.
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                              You can't switch any theme. To switch theme, change Dark Mode to Light Mode.
+                          </p>
+                      </div>
+                  ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {THEMES.map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => changeColorTheme(t.id)}
+                            className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left group ${
+                              colorTheme === t.id 
+                                ? "border-primary bg-primary/5 ring-1 ring-primary/20" 
+                                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            <div className="w-8 h-8 rounded-full shadow-sm flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: t.color }}>
+                              {colorTheme === t.id && <Check size={14} />}
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">{t.name}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                  )}
                 </div>
               </div>
             )}

@@ -3,6 +3,19 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ConfirmModal from '../components/ConfirmModal';
 
+export const colors = [
+  { light: '#FFEBEE', dark: '#450a0a' }, // Red (Darker: #450a0a)
+  { light: '#F3E5F5', dark: '#4a044e' }, // Purple (Darker: #4a044e)
+  { light: '#E3F2FD', dark: '#172554' }, // Blue (Darker: #172554)
+  { light: '#E8F5E9', dark: '#052e16' }, // Green (Darker: #052e16)
+  { light: '#FFFDE7', dark: '#422006' }, // Yellow/Amber (Darker: #422006)
+  { light: '#FFF3E0', dark: '#431407' }, // Orange (Darker: #431407)
+  { light: '#E0F7FA', dark: '#164e63' }, // Cyan (Darker: #164e63)
+  { light: '#F9FBE7', dark: '#365314' }, // Lime (Darker: #365314)
+  { light: '#FCE4EC', dark: '#500724' }, // Pink (Darker: #500724)
+  { light: '#F1F8E9', dark: '#14532d' }  // Light Green (Darker: #14532d)
+];
+
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
@@ -248,13 +261,16 @@ export const AppProvider = ({ children }) => {
   const addTag = async (tagName) => {
     if (tags.some(t => t.name === tagName)) return;
 
-    const colors = [
-        '#FFEBEE', '#F3E5F5', '#E3F2FD', '#E8F5E9', '#FFFDE7', '#FFF3E0', 
-        '#E0F7FA', '#F9FBE7', '#FCE4EC', '#F1F8E9'
-    ];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-
-    const newTag = { name: tagName, color };
+    const colorObj = colors[Math.floor(Math.random() * colors.length)];
+    // Store both light and dark variants in the object if possible, or just store the object
+    // Since existing data structure expects a string, we might need to change how we store it or just store the light one and map it?
+    // Better: Store the color object or ID. But to keep backward compatibility, let's store the light hex as ID if we can't change schema.
+    // Actually, we can just store the object if the app handles it.
+    // Let's stick to storing the object { light: '...', dark: '...' } in the 'color' field if possible.
+    // BUT, existing notes have string color.
+    // Solution: Store the whole object. Existing notes with string color will be treated as light-only or we migrate them.
+    
+    const newTag = { name: tagName, color: colorObj };
     const newTags = [...tags, newTag];
     setTags(newTags);
     
@@ -411,7 +427,16 @@ The editor supports left, center, right, and justified alignment.
     const categoryToUse = selectedCategory === 'All' ? 'General' : selectedCategory;
 
     const colors = [
-      '#E3F2FD', '#E8F5E9', '#FFFDE7', '#FFEBEE', '#F3E5F5', '#FFF3E0', 
+      { light: '#FFEBEE', dark: '#450a0a' }, // Red
+      { light: '#F3E5F5', dark: '#4a044e' }, // Purple
+      { light: '#E3F2FD', dark: '#172554' }, // Blue
+      { light: '#E8F5E9', dark: '#052e16' }, // Green
+      { light: '#FFFDE7', dark: '#422006' }, // Yellow
+      { light: '#FFF3E0', dark: '#431407' }, // Orange
+      { light: '#E0F7FA', dark: '#164e63' }, // Cyan
+      { light: '#F9FBE7', dark: '#365314' }, // Lime
+      { light: '#FCE4EC', dark: '#500724' }, // Pink
+      { light: '#F1F8E9', dark: '#14532d' }  // Light Green
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
@@ -420,7 +445,7 @@ The editor supports left, center, right, and justified alignment.
       title: 'Untitled Note',
       category: categoryToUse,
       tags: [],
-      color: randomColor,
+      color: randomColor, // Store object
       content: '# Untitled Note\n\nStart writing...',
       created_at: new Date().toISOString(),
       preview: 'Start writing...',

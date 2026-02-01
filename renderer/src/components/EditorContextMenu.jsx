@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Clipboard, FileText, Eraser, Trash2, X } from 'lucide-react';
+import { Clipboard, FileText, Eraser, Trash2, X, Copy } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 const EditorContextMenu = ({ position, onClose, onAction, selectionEmpty }) => {
@@ -39,19 +39,41 @@ const EditorContextMenu = ({ position, onClose, onAction, selectionEmpty }) => {
       </div>
 
       <button 
-        onClick={() => onAction('paste-formatted')}
-        className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+        onClick={() => onAction('copy')}
+        disabled={selectionEmpty}
+        className={`flex items-center justify-between gap-2 px-3 py-2 text-sm transition-colors text-left w-full ${
+            selectionEmpty 
+            ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' 
+            : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+        }`}
       >
-        <Clipboard size={14} className="text-blue-500" />
-        <span>Paste (Formatted)</span>
+        <div className="flex items-center gap-2">
+            <Copy size={14} className={selectionEmpty ? 'text-slate-300' : 'text-blue-500'} />
+            <span>Copy</span>
+        </div>
+        <span className="text-[10px] text-slate-400">Ctrl+C</span>
+      </button>
+
+      <button 
+        onClick={() => onAction('paste-formatted')}
+        className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left w-full"
+      >
+        <div className="flex items-center gap-2">
+            <Clipboard size={14} className="text-blue-500" />
+            <span>Paste</span>
+        </div>
+        <span className="text-[10px] text-slate-400">Ctrl+V</span>
       </button>
 
       <button 
         onClick={() => onAction('paste-plain')}
-        className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+        className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left w-full"
       >
-        <FileText size={14} className="text-slate-500" />
-        <span>Paste as Plain Text</span>
+        <div className="flex items-center gap-2">
+            <FileText size={14} className="text-slate-500" />
+            <span>Paste as Plain Text</span>
+        </div>
+        <span className="text-[10px] text-slate-400">Shift+Ctrl+V</span>
       </button>
 
       <div className="my-1 border-t border-slate-100 dark:border-slate-700" />

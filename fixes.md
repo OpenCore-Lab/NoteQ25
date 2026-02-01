@@ -89,3 +89,15 @@
 - **Programmatic Update Guard**: Implemented a `useRef` guard to distinguish between user edits and app-initiated content loading. This prevents the "Unsaved Changes" modal from appearing when simply switching notes.
 - **Content Normalization**: Added strict normalization (trimming, newline standardization) to the `onUpdate` handler to prevent invisible formatting differences from flagging the file as dirty.
 - **Autosave Refinement**: Updated the autosave logic to check the `unsavedChanges` flag before triggering, ensuring no redundant writes occur.
+
+## 12. Dark Mode Overhaul & Stability (2026-02-01)
+**Summary**: Fixed critical crashes when switching modes, refined Dark Mode UI/UX, and implemented strict theme constraints.
+**Description**:
+- **Dark Mode Card Logic**:
+    - **No Color Mode**: Disabled pastel card colors in Dark Mode to ensure a consistent, professional dark aesthetic. Cards now default to the system dark background.
+    - **High Contrast**: Enforced white text on all dark mode cards for maximum readability.
+    - **Selection State**: Implemented a high-contrast white border for selected cards in Dark Mode, replacing the potentially low-contrast primary color ring.
+- **Crash Fixes**:
+    - **Missing Exports**: Fixed a critical "ReferenceError" crash caused by the `colors` array not being exported from `AppContext`, which broke the app when toggling Dark Mode.
+- **Theme Constraints**:
+    - **Settings Logic**: Disabled the "Color Theme" selector when in Dark Mode to prevent visual conflicts. Added a user-friendly message explaining that themes are only available in Light Mode.

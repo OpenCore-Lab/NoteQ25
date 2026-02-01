@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp, colors } from '../store/AppContext';
 import { Search, Plus, Filter, ArrowDownUp, Trash2, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import ConfirmModal from './ConfirmModal';
 
 const NotesList = () => {
-  const { filteredNotes, selectedNoteId, setSelectedNoteId, addNote, searchQuery, setSearchQuery, selectedCategory, sortOption, setSortOption, deleteNote, duplicateNote, addNotification } = useApp();
+  const { filteredNotes, selectedNoteId, setSelectedNoteId, addNote, searchQuery, setSearchQuery, selectedCategory, sortOption, setSortOption, deleteNote, duplicateNote, addNotification, theme } = useApp();
   
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -58,6 +58,19 @@ const NotesList = () => {
       message: 'Note duplicated successfully',
       type: 'success'
     });
+  };
+
+  // Helper to get correct color based on theme
+  const getNoteColor = (note) => {
+      if (theme === 'dark') return undefined; // Disable colors in dark mode (black cards)
+      
+      if (!note.color) return undefined;
+      // Handle legacy string colors
+      if (typeof note.color === 'string') {
+        return note.color;
+      }
+      // Handle new object colors { light, dark }
+      return note.color.light;
   };
 
   return (
@@ -113,21 +126,25 @@ const NotesList = () => {
             No notes found.
           </div>
         ) : (
-          filteredNotes.map(note => (
+          filteredNotes.map(note => {
+            const displayColor = getNoteColor(note);
+            return (
             <div
               key={note.id}
               onClick={() => setSelectedNoteId(note.id)}
-              style={{ backgroundColor: note.color || '#ffffff' }}
+              style={displayColor ? { backgroundColor: displayColor } : undefined}
               className={clsx(
                 "p-3 rounded-lg cursor-pointer transition-all duration-300 border group relative animate-in fade-in slide-in-from-bottom-2",
+                !displayColor && "bg-white dark:bg-slate-800",
                 selectedNoteId === note.id 
-                  ? "border-primary/40 shadow-lg ring-2 ring-primary/20 z-10 scale-[1.02]" 
+                  ? "border-primary/40 dark:border-primary shadow-lg ring-2 ring-primary/20 z-10 scale-[1.02]" 
                   : "border-transparent hover:shadow-md hover:scale-[1.01] opacity-95 hover:opacity-100"
               )}
             >
               <div className="flex justify-between items-start mb-0.5">
                 <h4 className={clsx(
-                  "font-semibold truncate text-sm flex-1 pr-2 text-slate-800"
+                  "font-semibold truncate text-sm flex-1 pr-2 text-slate-800 dark:text-slate-100",
+                  displayColor && theme === 'dark' ? "text-white" : "text-slate-800"
                 )}>{note.title || 'Untitled'}</h4>
                 
                 {/* Action Buttons (Visible on hover or selected) */}
@@ -137,14 +154,24 @@ const NotesList = () => {
                 )}>
                   <button 
                     onClick={(e) => handleDuplicate(e, note.id)}
-                    className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white/50 rounded"
+                    className={clsx(
+                      "p-1 rounded transition-colors",
+                      displayColor && theme === 'dark' 
+                        ? "text-white/70 hover:text-white hover:bg-white/20" 
+                        : "text-slate-500 hover:text-blue-600 hover:bg-white/50 dark:hover:bg-slate-700/50"
+                    )}
                     title="Duplicate"
                   >
                     <Copy size={12} />
                   </button>
                   <button 
                     onClick={(e) => handleDelete(e, note.id)}
-                    className="p-1 text-slate-500 hover:text-red-600 hover:bg-white/50 rounded"
+                    className={clsx(
+                      "p-1 rounded transition-colors",
+                      displayColor && theme === 'dark' 
+                        ? "text-white/70 hover:text-white hover:bg-white/20" 
+                        : "text-slate-500 hover:text-red-600 hover:bg-white/50 dark:hover:bg-slate-700/50"
+                    )}
                     title="Delete"
                   >
                     <Trash2 size={12} />
@@ -152,12 +179,18 @@ const NotesList = () => {
                 </div>
               </div>
               
-              <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-serif opacity-80 mb-1.5">
+              <p className={clsx(
+                "text-[11px] line-clamp-2 leading-relaxed font-serif opacity-80 mb-1.5",
+                displayColor && theme === 'dark' ? "text-slate-200" : (displayColor ? "text-slate-600" : "text-slate-600 dark:text-slate-400")
+              )}>
                 {note.preview || 'No content...'}
               </p>
 
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500 font-medium">
+                <span className={clsx(
+                  "text-[10px] font-medium",
+                   displayColor && theme === 'dark' ? "text-slate-300" : (displayColor ? "text-slate-500" : "text-slate-500 dark:text-slate-500")
+                )}>
                   {(() => {
                     try {
                       const date = new Date(note.created_at);
@@ -169,7 +202,7 @@ const NotesList = () => {
                 </span>
               </div>
             </div>
-          ))
+          )})
         )}
       </div>
 

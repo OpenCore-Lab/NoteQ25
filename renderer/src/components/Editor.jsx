@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../store/AppContext';
+import { useApp, colors } from '../store/AppContext';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -60,6 +60,17 @@ const SmartListKeyboardExtension = Extension.create({
   name: 'smartListKeyboard',
   addKeyboardShortcuts() {
     return {
+      'Shift-Control-v': () => {
+        // Trigger paste-plain action
+        // We can't easily trigger the context menu action directly from here without access to handleContextMenuAction
+        // But we can implement the logic directly
+        navigator.clipboard.readText().then(text => {
+             this.editor.commands.insertContent(text);
+        }).catch(err => {
+             toast.error("Could not read clipboard");
+        });
+        return true; // Prevent default
+      },
       'Tab': () => {
         if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
           return this.editor.commands.sinkListItem(this.editor.isActive('taskItem') ? 'taskItem' : 'listItem');
@@ -825,6 +836,13 @@ const Editor = () => {
       editor.chain().focus().run(); // Ensure focus
 
       switch(action) {
+          case 'copy':
+              const selectedText = editor.state.selection.content().content.textBetween(0, editor.state.selection.content().size, '\n');
+              if (selectedText) {
+                  navigator.clipboard.writeText(selectedText);
+                  toast.success("Copied to clipboard");
+              }
+              break;
           case 'paste-formatted':
               try {
                   const items = await navigator.clipboard.read();
@@ -917,6 +935,18 @@ const Editor = () => {
         setLastSaved(date ? new Date(date) : null);
     }
   }, [selectedNote?.id]);
+
+  const getTagColor = (color) => {
+    if (!color) return '#f1f5f9';
+    if (typeof color === 'string') {
+        if (theme === 'dark') {
+            const matchedColor = colors.find(c => c.light.toLowerCase() === color.toLowerCase());
+            return matchedColor ? matchedColor.dark : color;
+        }
+        return color;
+    }
+    return theme === 'dark' ? color.dark : color.light;
+  };
 
   const handleTitleChange = (e) => {
     setTitle(e.target.value);
@@ -1112,10 +1142,10 @@ const Editor = () => {
                 <div className="flex flex-wrap gap-2 items-center">
                     {selectedNote.tags?.length > 0 ? selectedNote.tags.map(tagName => {
                         const tagInfo = tags.find(t => t.name === tagName);
-                        const color = tagInfo ? tagInfo.color : '#f1f5f9';
+                        const color = tagInfo ? getTagColor(tagInfo.color) : '#f1f5f9';
                         return (
                         <span key={tagName} className="px-3 py-1 rounded-md flex items-center gap-2 text-xs font-medium shadow-sm transition-transform hover:scale-105" style={{ backgroundColor: color }}>
-                            <span className="text-slate-800">#{tagName}</span>
+                            <span className="text-slate-800 dark:text-slate-100">#{tagName}</span>
                             <button 
                               onClick={() => {
                                 const newTags = selectedNote.tags.filter(t => t !== tagName);
