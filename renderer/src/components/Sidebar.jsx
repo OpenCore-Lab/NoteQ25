@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../store/AppContext';
-import { LayoutGrid, FileText, Trash2, Tag, Hash, Plus, Settings, MoreHorizontal, X, LogOut } from 'lucide-react';
+import { LayoutGrid, FileText, Trash2, Tag, Hash, Plus, Settings, MoreHorizontal, X, LogOut, ChevronDown, ChevronUp, Calendar as CalendarIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import logo from '../../assets/logo.png';
 import Calendar from 'react-calendar';
@@ -53,6 +53,9 @@ const Sidebar = () => {
   
   // Profile State
   const [userProfile, setUserProfile] = useState({ username: 'User', avatar: 'ava_01' });
+
+  // Calendar State
+  const [isCalendarExpanded, setIsCalendarExpanded] = useState(true);
 
   useEffect(() => {
       const loadProfile = async () => {
@@ -498,17 +501,40 @@ const Sidebar = () => {
 
       {/* Calendar Section - Fixed at bottom of sidebar (outside scroll area) */}
       <div className="mt-auto px-3 mb-2 shrink-0">
-         <div className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-md border border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-200">
-            <Calendar 
-              onChange={handleDateClick} 
-              value={new Date()} 
-              tileClassName={getTileClassName}
-              className="text-[10px] border-none bg-transparent w-full font-medium"
-              prev2Label={null}
-              next2Label={null}
-              showNeighboringMonth={false}
-              formatShortWeekday={(locale, date) => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][date.getDay()]}
-            />
+         <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-lg border border-slate-200/50 dark:border-slate-800 backdrop-blur-sm overflow-hidden transition-all duration-300">
+            {/* Header / Toggle Handle */}
+            <div 
+                onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
+                className={clsx(
+                    "flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors",
+                    isCalendarExpanded ? "border-b border-slate-100 dark:border-slate-800" : ""
+                )}
+            >
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                    <CalendarIcon size={14} className="text-primary dark:text-blue-400" />
+                    <span className="text-xs font-semibold">
+                        {isCalendarExpanded ? 'Calendar' : format(new Date(), 'do MMMM')}
+                    </span>
+                </div>
+                {isCalendarExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronUp size={14} className="text-slate-400" />}
+            </div>
+
+            {/* Calendar Content */}
+            <div className={clsx(
+                "transition-all duration-300 ease-in-out overflow-hidden",
+                isCalendarExpanded ? "max-h-[300px] opacity-100 p-2" : "max-h-0 opacity-0"
+            )}>
+                <Calendar 
+                  onChange={handleDateClick} 
+                  value={new Date()} 
+                  tileClassName={getTileClassName}
+                  className="text-[10px] border-none bg-transparent w-full font-medium"
+                  prev2Label={null}
+                  next2Label={null}
+                  showNeighboringMonth={false}
+                  formatShortWeekday={(locale, date) => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][date.getDay()]}
+                />
+            </div>
          </div>
       </div>
 

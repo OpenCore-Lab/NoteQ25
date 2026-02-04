@@ -98,100 +98,64 @@ body {
 
 /* React Calendar Overrides for Sidebar */
 .react-calendar {
-  background: white !important;
-  color: black !important;
-  border: none !important;
-  font-family: 'Inter', sans-serif !important;
-  width: 100% !important;
-  border-radius: 8px; /* Optional: adds rounded corners */
+  @apply bg-transparent w-full border-none font-sans !important;
 }
 
+/* Header (Month Year) */
 .react-calendar__navigation {
-  margin-bottom: 0.5rem !important;
+  @apply mb-2 flex items-center justify-between !important;
 }
 
 .react-calendar__navigation button {
-  color: black !important;
-  min-width: 24px !important;
-  background: none !important;
+  @apply min-w-[24px] h-6 bg-transparent text-slate-700 dark:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors !important;
 }
 
-.react-calendar__navigation button:enabled:hover,
-.react-calendar__navigation button:enabled:focus {
-  background-color: rgba(0, 0, 0, 0.1) !important;
-  border-radius: 4px;
+.react-calendar__navigation__label {
+  @apply font-bold text-xs pointer-events-none !important;
 }
 
+/* Weekdays */
 .react-calendar__month-view__weekdays {
-  text-transform: uppercase;
-  font-size: 0.6em;
-  font-weight: bold;
-  opacity: 0.6;
-  color: black !important;
+  @apply text-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1 !important;
+  text-decoration: none !important;
 }
 
 .react-calendar__month-view__weekdays__weekday {
-  padding: 4px !important;
-  text-align: center;
+  @apply p-1 !important;
 }
 
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none !important;
+}
+
+/* Days */
 .react-calendar__tile {
-  padding: 6px !important;
-  font-size: 0.9em;
-  border-radius: 6px;
-  color: black !important;
-  background: none !important;
+  @apply p-1.5 text-[11px] text-slate-700 dark:text-slate-300 rounded-md bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors relative !important;
 }
 
-.react-calendar__tile:enabled:hover,
-.react-calendar__tile:enabled:focus {
-  background-color: rgba(0, 0, 0, 0.1) !important;
+.react-calendar__tile:disabled {
+  @apply bg-transparent text-slate-300 dark:text-slate-700 !important;
 }
 
+/* Today */
 .react-calendar__tile--now {
-  background: rgba(0, 0, 0, 0.05) !important;
-  font-weight: bold;
-  color: black !important;
+  @apply bg-slate-100 dark:bg-slate-800 font-bold text-primary dark:text-blue-400 !important;
 }
 
+/* Active / Selected */
 .react-calendar__tile--active {
-  background: #2563EB !important; /* Keep active blue */
-  color: white !important; /* Active text white */
-  font-weight: bold;
-  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+  @apply bg-primary text-white font-bold shadow-md shadow-primary/30 !important;
 }
 
-/* Animations */
-@keyframes slide-in-from-bottom {
-  from {
-    transform: translateY(10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+  @apply bg-primary/90 !important;
 }
 
-.slide-in-from-bottom-2 {
-  animation: slide-in-from-bottom 0.3s ease-out forwards;
-}
-
-/* Daily Note Marker */
-.has-daily-note {
-  position: relative;
-}
-
+/* Daily Note Dot */
 .has-daily-note::after {
   content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
-  background-color: #4ade80; /* Green dot */
-  border-radius: 50%;
+  @apply absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500 !important;
 }
 
 /* Code Block Highlighting (Atom One Dark inspired) */
